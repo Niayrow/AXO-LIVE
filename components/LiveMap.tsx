@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { MapContainer, TileLayer, Marker, CircleMarker, Tooltip, Polyline, useMapEvents } from "react-leaflet";
 import { useQuery } from "@tanstack/react-query";
 import L from "leaflet";
@@ -49,7 +49,7 @@ interface LiveMapProps {
 // Custom DivIcon logic for buses
 const createBusIcon = (routeId: string = "B", bearing: number = 0, delaySeconds: number = 0) => {
   const lineColor = getLineColor(routeId);
-  const isDelayed = delaySeconds > 60;
+  const isDelayed = delaySeconds >= 300;
   const delayMin = Math.round(delaySeconds / 60);
   const shadowColor = isDelayed ? "rgba(239, 68, 68, 0.95)" : lineColor + "99"; // Red shadow if delayed
   const borderColor = isDelayed ? "#ef4444" : lineColor; // Red border if delayed
@@ -130,11 +130,20 @@ const createBusIcon = (routeId: string = "B", bearing: number = 0, delaySeconds:
   });
 };
 
-// Map Event Listener Component for Zoom
-function MapZoomListener({ setZoom }: { setZoom: (z: number) => void }) {
+// Map Event Listener Component for Zoom and Background clicks
+function MapEventsListener({
+  setZoom,
+  onMapClick
+}: {
+  setZoom: (z: number) => void;
+  onMapClick: () => void;
+}) {
   const map = useMapEvents({
     zoomend: () => {
       setZoom(map.getZoom());
+    },
+    click: () => {
+      onMapClick();
     }
   });
   return null;
@@ -143,6 +152,8 @@ function MapZoomListener({ setZoom }: { setZoom: (z: number) => void }) {
 export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps) {
   const [selectedBusId, setSelectedBusId] = useState<string | null>(null);
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
+  const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
+  const [isInitialModalOpen, setIsInitialModalOpen] = useState(true);
   const [zoomLevel, setZoomLevel] = useState(13);
 
   const [showBuses, setShowBuses] = useState(true);
@@ -155,6 +166,12 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
 
   // Derive live data
   const selectedBus = vehicles.find(v => v.id === selectedBusId) || null;
+
+  // Filter vehicles by the selected line
+  const filteredVehicles = useMemo(() => {
+    if (!selectedLineId) return vehicles;
+    return vehicles.filter(v => v.route_id === selectedLineId);
+  }, [vehicles, selectedLineId]);
 
   // Fetch all network stops for map visualization
   const { data: allStopsData } = useQuery({
@@ -169,18 +186,19 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
 
   const selectedStop = allStopsData?.stops?.find((s: any) => s.stop_id === selectedStopId) || null;
 
-  // Fetch static line data to get the precise stop timeline for the selected trip
+  // Fetch static line data to get the precise stop timeline for the selected trip or filtered line
+  const lineToFetch = selectedBus?.route_id || selectedLineId;
   const { data: staticData } = useQuery({
-    queryKey: ["staticLine", selectedBus?.trip_id],
+    queryKey: ["staticLine", selectedBus?.trip_id || selectedLineId],
     queryFn: async () => {
       const url = selectedBus?.trip_id
         ? `/api/axo/static-line?trip_id=${selectedBus.trip_id}`
-        : `/api/axo/static-line?line=${selectedBus?.route_id}`;
+        : `/api/axo/static-line?line=${lineToFetch}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error("Failed to fetch static line data");
       return res.json();
     },
-    enabled: !!(selectedBus?.trip_id || selectedBus?.route_id),
+    enabled: !!(selectedBus?.trip_id || lineToFetch),
     staleTime: Infinity,
   });
 
@@ -195,8 +213,19 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
     staleTime: Infinity,
   });
 
+  // Filter stops to show
+  const stopsToShow = useMemo(() => {
+    if (!showStops) return selectedStop ? [selectedStop] : [];
+    if (selectedBusId && staticData?.stops) return staticData.stops;
+    if (selectedLineId && allStopsData?.stops) {
+      // Show ALL stops serving this line, not just one representative trip!
+      return allStopsData.stops.filter((s: any) => s.lines?.includes(selectedLineId));
+    }
+    return allStopsData?.stops || [];
+  }, [showStops, selectedStop, selectedBusId, selectedLineId, staticData, allStopsData]);
+
   // Calculate upcoming buses for the selected stop
-  const upcomingBusesForStop = selectedStop ? vehicles.map(v => {
+  const upcomingBusesForStop = selectedStop ? filteredVehicles.map(v => {
     const update = v.stop_time_updates?.find(u => u.stop_id === selectedStop.stop_id);
     // Only include if bus has an update for this stop and hasn't passed it
     if (update && v.current_stop_sequence !== undefined && update.stop_sequence >= v.current_stop_sequence) {
@@ -213,11 +242,108 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
     return null;
   }).filter(Boolean).sort((a: any, b: any) => a.arrivalTime - b.arrivalTime) : [];
 
+  // Check if selected bus is waiting at the first stop and has not departed yet
+  const departureStatus = useMemo(() => {
+    if (!selectedBus || !staticData?.stops?.length) return null;
+    const firstStop = staticData.stops[0];
+    const currentSeq = selectedBus.current_stop_sequence || 0;
+
+    // Check if the bus is at or before the first stop
+    if (currentSeq <= firstStop.stop_sequence) {
+      const update = selectedBus.stop_time_updates?.find((u) => u.stop_id === firstStop.stop_id);
+      const departureTime = update?.departure?.time || update?.arrival?.time;
+      
+      if (departureTime) {
+        const nowSeconds = Math.floor(Date.now() / 1000);
+        const diffSeconds = departureTime - nowSeconds;
+        
+        if (diffSeconds > 0) {
+          const diffMinutes = Math.max(1, Math.round(diffSeconds / 60));
+          return {
+            minutes: diffMinutes,
+            isWaiting: true
+          };
+        }
+      }
+    }
+    return null;
+  }, [selectedBus, staticData]);
+
+  // Find current stop name if stopped or approaching
+  const currentStopInfo = useMemo(() => {
+    if (!selectedBus || !staticData?.stops?.length) return null;
+    const currentSeq = selectedBus.current_stop_sequence;
+    const stop = staticData.stops.find((s: any) => s.stop_sequence === currentSeq);
+    return {
+      name: stop?.stop_name || null,
+      status: selectedBus.current_status // 0: IN_TRANSIT_TO, 1: STOPPED_AT, 2: INCOMING_AT
+    };
+  }, [selectedBus, staticData]);
+
   // Bassin de Creil / Montataire
   const center: [number, number] = [49.2583, 2.4764];
 
   return (
     <div className="relative w-full h-[calc(100vh-80px)] overflow-hidden bg-slate-950">
+
+      {/* Onboarding Modal asking which line to visualize */}
+      {isInitialModalOpen && (
+        <div className="fixed inset-0 z-[9999] bg-slate-950/80 backdrop-blur-xl flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-slate-900/90 border border-white/10 rounded-[32px] p-8 max-w-sm w-full shadow-2xl flex flex-col gap-6 text-center relative overflow-hidden">
+            {/* Ambient background glow */}
+            <div className="absolute -top-12 -left-12 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute -bottom-12 -right-12 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+
+            <div className="flex flex-col items-center gap-2">
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 mb-2">
+                <Bus size={24} className="animate-pulse" />
+              </div>
+              <h3 className="text-xl font-black text-white tracking-wide">
+                Réseau AXO Live
+              </h3>
+              <p className="text-xs font-medium text-slate-400 max-w-[260px] leading-relaxed">
+                Quelle ligne de bus souhaitez-vous visualiser en temps réel sur la carte ?
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {Object.keys(LINE_COLORS).map((line) => {
+                const lineColor = LINE_COLORS[line];
+                return (
+                  <button
+                    key={line}
+                    onClick={() => {
+                      setSelectedLineId(line);
+                      setIsInitialModalOpen(false);
+                    }}
+                    className="py-3.5 px-4 rounded-2xl border text-sm font-black uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-2 shadow-sm hover:scale-[1.02] active:scale-[0.98]"
+                    style={{
+                      backgroundColor: `${lineColor}15`,
+                      borderColor: `${lineColor}30`,
+                      color: lineColor,
+                    }}
+                  >
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: lineColor }} />
+                    Ligne {line}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="border-t border-white/5 pt-4">
+              <button
+                onClick={() => {
+                  setSelectedLineId(null);
+                  setIsInitialModalOpen(false);
+                }}
+                className="w-full py-3.5 px-4 rounded-2xl bg-slate-800/60 hover:bg-slate-800 border border-white/5 hover:border-white/10 text-white font-bold text-xs uppercase tracking-widest transition-all duration-300 shadow-inner flex items-center justify-center gap-2"
+              >
+                Toutes les lignes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Floating Real-time Update Indicator */}
       <div className="absolute top-4 left-4 z-[1000] flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-slate-900/90 border border-white/10 backdrop-blur-md shadow-lg">
@@ -228,6 +354,51 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
         <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider">
           MAJ Bus • {lastUpdated.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
         </span>
+      </div>
+
+      {/* Top Floating Line Filter Bar */}
+      <div className="absolute top-16 left-4 right-4 z-[1000] flex justify-center pointer-events-none">
+        <div className="pointer-events-auto flex items-center gap-1.5 p-1.5 bg-slate-900/80 border border-white/10 backdrop-blur-md rounded-2xl shadow-xl overflow-x-auto max-w-full no-scrollbar">
+          <button
+            onClick={() => {
+              setSelectedLineId(null);
+              setSelectedBusId(null);
+              setSelectedStopId(null);
+            }}
+            className={`px-3.5 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 border ${
+              !selectedLineId
+                ? "bg-amber-500 border-amber-400 text-slate-950 shadow-[0_0_10px_rgba(245,158,11,0.3)]"
+                : "bg-slate-950/65 border-white/5 text-slate-400 hover:text-white"
+            }`}
+          >
+            Toutes Lignes
+          </button>
+          
+          {Object.keys(LINE_COLORS).map((line) => {
+            const lineColor = LINE_COLORS[line];
+            const isActive = selectedLineId === line;
+            return (
+              <button
+                key={line}
+                onClick={() => {
+                  setSelectedLineId(line);
+                  setSelectedBusId(null);
+                  setSelectedStopId(null);
+                }}
+                className="px-3.5 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 border flex items-center gap-1.5 shrink-0"
+                style={{
+                  backgroundColor: isActive ? `${lineColor}33` : "rgba(2, 6, 23, 0.65)",
+                  borderColor: isActive ? lineColor : "rgba(255, 255, 255, 0.05)",
+                  color: isActive ? "#ffffff" : lineColor,
+                  boxShadow: isActive ? `0 0 10px ${lineColor}40` : "none",
+                }}
+              >
+                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: lineColor }} />
+                Ligne {line}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Floating Filter Controls Button & Menu */}
@@ -317,6 +488,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
             -1.5px  1.5px 0 #020617,
              1.5px  1.5px 0 #020617,
              0px 4px 10px rgba(0,0,0,0.9) !important;
+          pointer-events: none !important;
           transition: color 0.2s ease-in-out;
         }
         .stop-tooltip-clean::before {
@@ -344,7 +516,13 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
           zoomControl={false}
           attributionControl={false}
         >
-          <MapZoomListener setZoom={setZoomLevel} />
+          <MapEventsListener
+            setZoom={setZoomLevel}
+            onMapClick={() => {
+              setSelectedBusId(null);
+              setSelectedStopId(null);
+            }}
+          />
 
           {/* Dark Mode CartoDB layer */}
           <TileLayer
@@ -355,19 +533,28 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
           {/* Network Polylines (Shapes) */}
           {showShapes && shapesData?.shapes?.map((shape: any) => {
             // Determine if this line should be highlighted
-            const isLineSelected = selectedBus?.route_id === shape.route_id;
-            const hasBusSelected = !!selectedBusId;
+            const isLineSelected = selectedLineId ? selectedLineId === shape.route_id : selectedBus?.route_id === shape.route_id;
+            const hasActiveFilter = !!selectedLineId || !!selectedBusId;
 
-            // If a bus is selected, completely hide all other shapes
-            if (hasBusSelected && !isLineSelected) return null;
+            // If a filter is set, completely hide other shapes
+            if (hasActiveFilter && !isLineSelected) return null;
 
-            const opacity = hasBusSelected ? 1 : 0.6;
-            const weight = hasBusSelected ? 6 : 4;
+            const opacity = hasActiveFilter ? 1 : 0.6;
+            const weight = hasActiveFilter ? 6 : 4;
 
             return (
               <Polyline
                 key={`shape-${shape.shape_id || Math.random()}`}
                 positions={shape.coordinates}
+                interactive={true}
+                eventHandlers={{
+                  click: (e) => {
+                    L.DomEvent.stopPropagation(e);
+                    setSelectedLineId(shape.route_id);
+                    setSelectedBusId(null);
+                    setSelectedStopId(null);
+                  }
+                }}
                 pathOptions={{
                   color: getLineColor(shape.route_id),
                   weight: weight,
@@ -380,22 +567,23 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
           })}
 
           {/* Physical Network Stops */}
-          {(showStops ? (selectedBusId && staticData?.stops ? staticData.stops : allStopsData?.stops) : (selectedStop ? [selectedStop] : []))?.map((stop: any) => {
+          {stopsToShow?.map((stop: any) => {
             const isSelected = selectedStopId === stop.stop_id;
             return (
               <CircleMarker
                 key={stop.stop_id}
                 center={[stop.stop_lat, stop.stop_lon]}
-                radius={isSelected ? 6 : 2.5}
+                radius={isSelected ? 10 : 6}
                 pathOptions={{
-                  color: isSelected ? "#f59e0b" : "rgba(255,255,255,0.2)",
-                  weight: isSelected ? 2 : 1,
-                  fillColor: isSelected ? "#b45309" : "#ffffff",
-                  fillOpacity: isSelected ? 1 : 0.5,
+                  color: isSelected ? "#f59e0b" : "#ffffff",
+                  weight: isSelected ? 4 : 2,
+                  fillColor: isSelected ? "#78350f" : "#0f172a",
+                  fillOpacity: 1,
                 }}
                 interactive={true}
                 eventHandlers={{
-                  click: () => {
+                  click: (e) => {
+                    L.DomEvent.stopPropagation(e);
                     setSelectedStopId(stop.stop_id);
                     setSelectedBusId(null); // Deselect bus
                   }
@@ -403,12 +591,12 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
               >
                 {(zoomLevel >= 15 || isSelected) && (
                   <Tooltip
-                    direction="top"
-                    offset={[0, -4]}
-                    opacity={1}
-                    permanent
-                    interactive={false}
-                    className={`stop-tooltip-clean ${isSelected ? "stop-tooltip-selected" : ""}`}
+                     direction="top"
+                     offset={[0, -4]}
+                     opacity={1}
+                     permanent
+                     interactive={false}
+                     className={`stop-tooltip-clean ${isSelected ? "stop-tooltip-selected" : ""}`}
                   >
                     {stop.stop_name}
                   </Tooltip>
@@ -418,7 +606,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
           })}
 
           {/* Real-time Buses */}
-          {showBuses && vehicles.map((vehicle) => {
+          {showBuses && filteredVehicles.map((vehicle) => {
             if (!vehicle.position?.lat || !vehicle.position?.lon) return null;
 
             const isDelayed = (vehicle.delay || 0) > 60;
@@ -428,7 +616,8 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                 position={[vehicle.position.lat, vehicle.position.lon]}
                 icon={createBusIcon(vehicle.route_id, vehicle.position.bearing || 0, vehicle.delay || 0)}
                 eventHandlers={{
-                  click: () => {
+                  click: (e) => {
+                    L.DomEvent.stopPropagation(e);
                     setSelectedBusId(vehicle.id);
                     setSelectedStopId(null); // Deselect stop
                   },
@@ -450,9 +639,9 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
           {selectedBus && (
             <>
               <div className="flex justify-between items-start shrink-0">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-4">
                   <div
-                    className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl border"
+                    className="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-2xl border shadow-lg"
                     style={{
                       backgroundColor: `${getLineColor(selectedBus.route_id)}33`,
                       color: getLineColor(selectedBus.route_id),
@@ -462,45 +651,84 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                     {selectedBus.route_id || "B"}
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold text-white flex items-center gap-2 tracking-wide">
+                    <h3 className="text-2xl font-black text-white flex items-center gap-2 tracking-wide">
                       Bus {selectedBus.vehicle_id || "Inconnu"}
                     </h3>
-                    <p className="text-xs font-semibold mt-0.5" style={{ color: getLineColor(selectedBus.route_id) }}>
-                      Direction : {selectedBus.trip_headsign || "Inconnue"}
-                    </p>
+                    <div className="mt-2.5 bg-black border border-slate-800 rounded-xl px-4 py-2.5 shadow-[inset_0_2px_8px_rgba(0,0,0,0.8)] relative overflow-hidden flex items-center justify-between min-w-[200px]">
+                      {/* Ambient grid texture overlay to simulate LED display */}
+                      <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[size:100%_4px,6px_100%] pointer-events-none" />
+                      
+                      <div className="relative z-10 flex flex-col">
+                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">
+                          Direction
+                        </span>
+                        <span className="text-sm md:text-base font-black font-mono text-amber-500 uppercase tracking-wider leading-tight drop-shadow-[0_0_6px_rgba(245,158,11,0.85)]">
+                          {selectedBus.trip_headsign || "SANS VOYAGEURS"}
+                        </span>
+                      </div>
+                      
+                      {/* Led indicators on the right of the sign */}
+                      <div className="relative z-10 flex gap-1.5 pl-4 border-l border-slate-800/80 shrink-0">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500/30 animate-pulse" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 drop-shadow-[0_0_4px_rgba(245,158,11,0.85)]" />
+                      </div>
+                    </div>
+
+                    {currentStopInfo?.name && currentStopInfo.status === 1 && (
+                      <div className="mt-2 flex items-center gap-2 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase tracking-wider animate-pulse inline-flex">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                        À l'arrêt : {currentStopInfo.name}
+                      </div>
+                    )}
+
+                    {currentStopInfo?.name && currentStopInfo.status === 2 && (
+                      <div className="mt-2 flex items-center gap-2 px-2.5 py-1 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-[10px] font-black uppercase tracking-wider animate-pulse inline-flex">
+                        <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-ping" />
+                        En approche : {currentStopInfo.name}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <button
                   onClick={() => setSelectedBusId(null)}
-                  className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-800/80 text-slate-400 hover:text-white transition-colors border border-white/5"
+                  className="w-12 h-12 flex items-center justify-center rounded-full bg-slate-800/80 text-slate-400 hover:text-white transition-colors border border-white/5"
                 >
-                  <X size={20} />
+                  <X size={24} />
                 </button>
               </div>
 
               <div className="flex gap-2 shrink-0">
-                <div className={`flex-1 flex items-center gap-2 p-3.5 rounded-2xl border ${(selectedBus.delay || 0) > 60
-                    ? "bg-orange-500/10 border-orange-500/30 text-orange-400"
-                    : "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                  }`}>
-                  <Clock size={20} />
-                  <span className="font-semibold text-sm">
-                    {(selectedBus.delay || 0) > 60
-                      ? `Retard: +${Math.round((selectedBus.delay || 0) / 60)} min`
-                      : "Bus à l'heure"}
-                  </span>
-                </div>
+                {departureStatus ? (
+                  <div className="flex-1 flex items-center gap-3 p-4.5 rounded-2xl border bg-amber-500/10 border-amber-500/30 text-amber-400">
+                    <Clock size={22} className="animate-pulse" />
+                    <span className="font-extrabold text-base tracking-wide">
+                      En attente au terminus • Départ dans {departureStatus.minutes} min
+                    </span>
+                  </div>
+                ) : (
+                  <div className={`flex-1 flex items-center gap-3 p-4.5 rounded-2xl border ${(selectedBus.delay || 0) > 60
+                      ? "bg-orange-500/10 border-orange-500/30 text-orange-400"
+                      : "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                    }`}>
+                    <Clock size={22} />
+                    <span className="font-extrabold text-base tracking-wide">
+                      {(selectedBus.delay || 0) > 60
+                        ? `Retard : +${Math.round((selectedBus.delay || 0) / 60)} min`
+                        : "Bus à l'heure"}
+                    </span>
+                  </div>
+                )}
               </div>
 
-              <div className="flex-1 overflow-y-auto no-scrollbar rounded-xl bg-slate-950/50 border border-white/5 p-4 mt-2">
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-                  <MapPin size={14} />
+              <div className="flex-1 overflow-y-auto no-scrollbar rounded-2xl bg-slate-950/50 border border-white/5 p-6 mt-3">
+                <h4 className="text-sm font-extrabold text-slate-300 uppercase tracking-wider mb-6 flex items-center gap-2.5">
+                  <MapPin size={18} className="text-amber-500" />
                   Trajet de la course
                 </h4>
 
-                <div className="relative pl-3 border-l-2 border-slate-800 space-y-6">
+                <div className="relative pl-6 border-l-[3px] border-slate-800 space-y-10">
                   {!staticData?.stops && (
-                    <div className="text-slate-500 text-sm">Chargement du trajet...</div>
+                    <div className="text-slate-500 text-sm animate-pulse">Chargement du trajet...</div>
                   )}
 
                   {staticData?.stops?.map((stop: any) => {
@@ -510,23 +738,29 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                     const isPassed = stopSeq < currentSeq;
                     const isNext = stopSeq === currentSeq;
 
+                    const isFirstStop = stop.stop_id === staticData?.stops?.[0]?.stop_id;
+                    const isWaitingToDepart = isFirstStop && departureStatus?.isWaiting;
+
                     const update = selectedBus.stop_time_updates?.find((u) => u.stop_id === stop.stop_id);
                     const hasUpdate = !!update?.arrival?.time;
 
-                    const timeStr = hasUpdate
+                    const scheduledTime = stop.arrival_time?.slice(0, 5) || "--:--";
+                    const expectedTime = hasUpdate
                       ? new Date((update.arrival!.time as number) * 1000).toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" })
-                      : stop.arrival_time?.slice(0, 5) || "--:--"; const activeColor = getLineColor(selectedBus.route_id);
+                      : null;
+                    const delayMin = hasUpdate ? Math.round((update.arrival?.delay || 0) / 60) : 0;
+                    const activeColor = getLineColor(selectedBus.route_id);
 
                     const dotClass = isPassed ? "bg-slate-700 border-slate-600" : isNext ? "animate-pulse" : "bg-slate-300 border-slate-400";
-                    const dotStyle = isNext ? { backgroundColor: activeColor, borderColor: activeColor, boxShadow: `0 0 10px ${activeColor}cc` } : {};
+                    const dotStyle = isNext ? { backgroundColor: activeColor, borderColor: activeColor, boxShadow: `0 0 12px ${activeColor}cc` } : {};
 
-                    const textColor = isPassed ? "text-slate-500 line-through" : isNext ? "" : "text-slate-200";
-                    const textColorStyle = isNext ? { color: activeColor, fontWeight: "bold" } : {};
+                    const textColor = isPassed ? "text-slate-500 line-through font-medium" : isNext ? "" : "text-slate-200";
+                    const textColorStyle = isNext ? { color: activeColor, fontWeight: "900" } : {};
 
                     const timeColor = isPassed ? "text-slate-600" : isNext ? "" : "text-slate-400";
-                    const timeColorStyle = isNext ? { color: activeColor, fontWeight: "bold" } : {};
+                    const timeColorStyle = isNext ? { color: activeColor, fontWeight: "900" } : {};
 
-                    // Calculate real-time bus position between stops
+                    // Calculate real-time bus position between stops with our new taller spacing
                     let busStyle = {};
                     const status = selectedBus.current_status ?? 0;
 
@@ -535,51 +769,87 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                       busStyle = { top: "50%", transform: "translateY(-50%)" };
                     } else if (status === 2) {
                       // INCOMING_AT: Slightly above the dot
-                      busStyle = { top: "-12px", transform: "translateY(-50%)" };
+                      busStyle = { top: "-18px", transform: "translateY(-50%)" };
                     } else {
                       // IN_TRANSIT_TO: Between this stop and the previous one
-                      busStyle = { top: "-28px", transform: "translateY(-50%)" };
+                      busStyle = { top: "-42px", transform: "translateY(-50%)" };
                     }
 
                     if (isPassed && stopSeq < currentSeq - 1) return null;
 
                     return (
-                      <div key={stop.stop_id} className="relative flex items-center justify-between">
+                      <div key={stop.stop_id} className="relative flex items-center justify-between min-h-[44px]">
                         {/* Static stop dot */}
-                        <div className={`absolute -left-[1.05rem] w-3 h-3 rounded-full border-2 ${dotClass}`} style={dotStyle} />
+                        <div className={`absolute -left-[32.5px] w-5 h-5 rounded-full border-[3px] z-10 ${dotClass}`} style={dotStyle} />
 
                         {/* Real-time animated bus on the timeline */}
                         {isNext && (
                           <div
-                            className="absolute -left-[1.425rem] w-6 h-6 rounded-full flex items-center justify-center z-20 transition-all duration-1000 ease-in-out"
+                            className="absolute -left-[40.5px] w-9 h-9 rounded-full flex items-center justify-center z-20 transition-all duration-1000 ease-in-out"
                             style={{
                               ...busStyle,
-                              boxShadow: `0 0 12px ${activeColor}`
+                              boxShadow: `0 0 16px ${activeColor}`
                             }}
                           >
                             <div
-                              className="absolute inset-0 rounded-full animate-ping opacity-40"
+                              className="absolute inset-0 rounded-full animate-ping opacity-45"
                               style={{ backgroundColor: activeColor }}
                             />
                             <div
-                              className="relative w-full h-full rounded-full flex items-center justify-center border-2"
+                              className="relative w-full h-full rounded-full flex items-center justify-center border-[2.5px]"
                               style={{
                                 borderColor: activeColor,
                                 color: activeColor,
                                 backgroundColor: "#020617"
                               }}
                             >
-                              <Bus size={11} className="animate-pulse" />
+                              <Bus size={15} className="animate-pulse" />
                             </div>
                           </div>
                         )}
 
-                        <div className={`text-sm truncate pr-4 ${textColor}`} style={textColorStyle}>
+                        <div className={`text-base md:text-lg font-bold truncate pr-4 ${textColor}`} style={textColorStyle}>
                           {stop.stop_name}
                         </div>
-                        <div className={`text-xs ${timeColor}`} style={timeColorStyle}>
-                          {timeStr}
-                          {hasUpdate && !isPassed && <span className="text-[9px] ml-1 opacity-70">(TR)</span>}
+                        
+                        <div className="flex items-center gap-2 shrink-0">
+                          {hasUpdate && expectedTime ? (
+                            <div className="flex flex-col items-end gap-1">
+                              {/* Expected real-time arrival */}
+                              <div className={`text-sm md:text-base font-extrabold bg-slate-900 border border-white/5 px-3 py-1.5 rounded-xl shadow-inner ${timeColor}`} style={timeColorStyle}>
+                                {expectedTime}
+                              </div>
+                              
+                              {/* Scheduled time and delay status indicator */}
+                              <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider">
+                                <span className="text-slate-500 line-through">
+                                  {scheduledTime}
+                                </span>
+                                {isWaitingToDepart ? (
+                                  <span className="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 font-extrabold animate-pulse">
+                                    Départ dans {departureStatus.minutes} min
+                                  </span>
+                                ) : delayMin > 0 ? (
+                                  <span className="px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/20 text-red-400">
+                                    +{delayMin} min
+                                  </span>
+                                ) : delayMin < 0 ? (
+                                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                                    {delayMin} min
+                                  </span>
+                                ) : (
+                                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                                    À l'heure
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            /* Fallback to theoretical only */
+                            <div className={`text-xs md:text-sm font-extrabold bg-slate-900 border border-white/5 px-3.5 py-1.5 rounded-xl shadow-inner ${timeColor}`} style={timeColorStyle}>
+                              {scheduledTime}
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
@@ -598,12 +868,25 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                     <MapPin size={24} />
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold text-white flex items-center gap-2 tracking-wide">
-                      {selectedStop.stop_name}
-                    </h3>
-                    <p className="text-sm text-slate-400">
-                      Arrêt de bus
-                    </p>
+                    <div className="bg-black border border-slate-800 rounded-xl px-4 py-2 shadow-[inset_0_2px_8px_rgba(0,0,0,0.8)] relative overflow-hidden flex items-center justify-between min-w-[200px]">
+                      {/* Ambient grid texture overlay to simulate LED display */}
+                      <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[size:100%_4px,6px_100%] pointer-events-none" />
+                      
+                      <div className="relative z-10 flex flex-col">
+                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">
+                          Arrêt Physique
+                        </span>
+                        <span className="text-sm md:text-base font-black font-mono text-cyan-400 uppercase tracking-wider leading-tight drop-shadow-[0_0_6px_rgba(34,211,238,0.85)]">
+                          {selectedStop.stop_name}
+                        </span>
+                      </div>
+                      
+                      {/* Led indicators on the right of the sign */}
+                      <div className="relative z-10 flex gap-1.5 pl-4 border-l border-slate-800/80 shrink-0">
+                        <span className="w-1.5 h-1.5 rounded-full bg-cyan-500/30 animate-pulse" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 drop-shadow-[0_0_4px_rgba(34,211,238,0.85)]" />
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <button

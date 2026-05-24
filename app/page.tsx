@@ -31,8 +31,8 @@ export default function Home() {
 
   const tools = [
     {
-      name: "Supervision du Réseau",
-      description: "Suivez l'état du réseau en temps réel, affichez les bus en circulation, le taux de ponctualité et les alertes de trafic actives.",
+      name: "Infos Trafic",
+      description: "Consultez l'état du réseau en direct, visualisez la régularité des lignes, le taux de ponctualité et les alertes info trafic actives.",
       href: "/supervision",
       icon: Activity,
       tag: "Dashboard Live",
@@ -115,7 +115,7 @@ export default function Home() {
                 {activeAlerts[0]?.header_text || "Des perturbations affectent actuellement le réseau de bus AXO."}
               </p>
               <Link href="/supervision" className="text-[10px] font-bold text-red-400 hover:underline flex items-center gap-1 mt-2">
-                Voir toutes les alertes de supervision <ArrowRight size={10} />
+                Voir toutes les alertes infos trafic <ArrowRight size={10} />
               </Link>
             </div>
           </div>

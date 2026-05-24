@@ -64,7 +64,7 @@ export default function SupervisionPage() {
           <div>
             <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-2">
               <Signal className="text-cyan-400" />
-              Supervision
+              Infos Trafic
             </h1>
             <p className="text-xs text-slate-400 mt-1 font-medium">
               {isRealtimeLoading ? "Recherche de bus..." : `${routeVehicles.length} bus en circulation`} 

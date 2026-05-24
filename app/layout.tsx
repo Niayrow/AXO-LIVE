@@ -16,7 +16,7 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: "AXO Live Dashboard",
-  description: "Supervision en temps réel du réseau de bus AXO",
+  description: "Suivi en temps réel et infos trafic du réseau de bus AXO",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,

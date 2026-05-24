@@ -11,7 +11,7 @@ export default function BottomNav() {
     { name: "Carte", href: "/map", icon: Map },
     { name: "Itinéraires", href: "/itinerary", icon: Compass },
     { name: "Arrêts", href: "/stops", icon: List },
-    { name: "Supervision", href: "/supervision", icon: Activity },
+    { name: "Infos Trafic", href: "/supervision", icon: Activity },
   ];
 
   return (
