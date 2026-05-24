@@ -1,0 +1,1 @@
+self.__REACT_LOADABLE_MANIFEST="{\"app\\\\map\\\\page.tsx -> @/components/LiveMap\":{\"id\":\"app\\\\map\\\\page.tsx -> @/components/LiveMap\",\"files\":[\"static/css/_app-pages-browser_components_LiveMap_tsx.css\",\"static/chunks/_app-pages-browser_components_LiveMap_tsx.js\"]}}"
