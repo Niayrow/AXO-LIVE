@@ -17,8 +17,7 @@ export default function BottomNav() {
   return (
     <nav className="fixed bottom-0 left-0 right-0 h-20 backdrop-blur-md bg-slate-950/70 border-t border-white/10 z-50 px-6 pb-safe flex justify-between items-center">
       {navItems.map((item) => {
-        // Supervision is active on / or /supervision
-        const isActive = pathname === item.href || (pathname === "/" && item.href === "/supervision");
+        const isActive = pathname === item.href;
         const Icon = item.icon;
         
         return (
