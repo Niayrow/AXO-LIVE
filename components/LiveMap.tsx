@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Clock, Info, X, MapPin, Bus, SlidersHorizontal } from "lucide-react";
+import { LINE_COLORS, getLineColor } from "./lineColors";
 
 // Fix Leaflet's default icon paths in Next.js
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -43,15 +44,7 @@ interface LiveMapProps {
   lastUpdatedTimestamp?: number;
 }
 
-// Official Line Colors
-export const LINE_COLORS: Record<string, string> = {
-  "A": "#ef4444", // red-500
-  "B": "#3b82f6", // blue-500
-  "C1": "#a3e635", // lime-400 (clair)
-  "C2": "#15803d", // green-700 (foncé)
-  "D": "#eab308", // yellow-500
-};
-export const getLineColor = (routeId?: string) => LINE_COLORS[routeId || ""] || "#f59e0b"; // default amber-500
+// LINE_COLORS and getLineColor are now imported from ./lineColors
 
 // Custom DivIcon logic for buses
 const createBusIcon = (routeId: string = "B", bearing: number = 0, delaySeconds: number = 0) => {

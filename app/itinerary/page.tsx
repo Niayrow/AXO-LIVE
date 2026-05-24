@@ -15,7 +15,7 @@ import {
   HelpCircle,
   Play
 } from "lucide-react";
-import { getLineColor } from "@/components/LiveMap";
+import { getLineColor } from "@/components/lineColors";
 
 // Subcomponent to fetch and render the live/theoretical upcoming departures for Leg 1 boarding stop
 function NextLegDepartures({ stopName, lineId }: { stopName: string; lineId: string }) {

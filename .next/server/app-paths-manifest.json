@@ -1,7 +1,0 @@
-{
-  "/supervision/page": "app/supervision/page.js",
-  "/map/page": "app/map/page.js",
-  "/stops/page": "app/stops/page.js",
-  "/api/axo/realtime/route": "app/api/axo/realtime/route.js",
-  "/itinerary/page": "app/itinerary/page.js"
-}

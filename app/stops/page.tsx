@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search, MapPin, Bus, Clock, ChevronDown, Filter, Calendar } from "lucide-react";
-import { getLineColor } from "@/components/LiveMap";
+import { getLineColor } from "@/components/lineColors";
 
 const TARGET_LINES = ["A", "B", "C1", "C2", "D"];
 
