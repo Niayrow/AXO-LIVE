@@ -7,15 +7,13 @@ import {
   List, 
   Activity, 
   ArrowRight, 
-  Bus, 
-  AlertCircle, 
-  Info,
-  Clock
+  AlertCircle,
+  Bus,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { LINE_COLORS } from "@/components/lineColors";
 
 export default function Home() {
-  // Fetch real-time alerts to display a live ticker or status badge on the home page
   const { data: alertsData } = useQuery({
     queryKey: ["networkAlerts"],
     queryFn: async () => {
@@ -23,184 +21,197 @@ export default function Home() {
       if (!res.ok) return { alerts: [] };
       return res.json();
     },
-    refetchInterval: 60000, // Refresh alerts every minute
+    refetchInterval: 60000,
   });
 
-  const activeAlerts = alertsData?.alerts || [];
-  const alertCount = activeAlerts.length;
+  const { data: realtimeData } = useQuery({
+    queryKey: ["realtimeHome"],
+    queryFn: async () => {
+      const res = await fetch("/api/axo/realtime");
+      if (!res.ok) return { vehicles: [] };
+      return res.json();
+    },
+    refetchInterval: 20000,
+  });
 
-  const tools = [
+  const alertCount = alertsData?.alerts?.length || 0;
+  const busCount = realtimeData?.vehicles?.length || 0;
+
+  const navItems = [
     {
       name: "Infos Trafic",
-      description: "Consultez l'état du réseau en direct, visualisez la régularité des lignes, le taux de ponctualité et les alertes info trafic actives.",
+      subtitle: "État du réseau en direct",
       href: "/supervision",
       icon: Activity,
-      tag: "Dashboard Live",
-      colorClass: "from-amber-500/20 to-amber-600/5 border-amber-500/30 text-amber-400",
-      badge: alertCount > 0 ? `${alertCount} alerte${alertCount > 1 ? 's' : ''}` : "Trafic normal",
-      badgeColor: alertCount > 0 ? "bg-red-500/20 text-red-400 border-red-500/30" : "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+      color: "#f59e0b",
     },
     {
-      name: "Carte Interactive",
-      description: "Visualisez la position géographique des bus en direct sur la carte du bassin de Creil, ainsi que le tracé complet de toutes les lignes AXO.",
+      name: "Carte",
+      subtitle: "Position des bus en direct",
       href: "/map",
       icon: Map,
-      tag: "Suivi Direct",
-      colorClass: "from-blue-500/20 to-blue-600/5 border-blue-500/30 text-blue-400",
-      badge: "Positions GPS",
-      badgeColor: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+      color: "#3b82f6",
     },
     {
-      name: "Planificateur d'Itinéraires",
-      description: "Calculez instantanément le trajet optimal d'un point A à un point B, avec des calculs de correspondances automatiques et les prochains départs.",
+      name: "Itinéraire",
+      subtitle: "Calculer un trajet",
       href: "/itinerary",
       icon: Compass,
-      tag: "Calcul Intelligent",
-      colorClass: "from-emerald-500/20 to-emerald-600/5 border-emerald-500/30 text-emerald-400",
-      badge: "Multimodal",
-      badgeColor: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+      color: "#10b981",
     },
     {
-      name: "Horaires & Arrêts",
-      description: "Accédez à la liste complète de toutes les stations, recherchez votre arrêt et consultez les grilles horaires théoriques ainsi que les prochains passages.",
+      name: "Horaires",
+      subtitle: "Arrêts & prochains passages",
       href: "/stops",
       icon: List,
-      tag: "Fiches Horaires",
-      colorClass: "from-purple-500/20 to-purple-600/5 border-purple-500/30 text-purple-400",
-      badge: "Temps Réel",
-      badgeColor: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+      color: "#a855f7",
     },
   ];
 
   return (
-    <div className="relative min-h-screen bg-slate-950 text-white flex flex-col items-center justify-start overflow-x-hidden">
+    <div className="relative min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center overflow-hidden px-6">
       
-      {/* Decorative Premium Glow Background */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[350px] bg-gradient-to-b from-amber-500/10 to-transparent blur-[120px] rounded-full pointer-events-none z-0" />
-      <div className="absolute bottom-0 right-0 w-[400px] h-[300px] bg-gradient-to-t from-blue-500/5 to-transparent blur-[100px] rounded-full pointer-events-none z-0" />
-      
-      {/* Core Container */}
-      <div className="relative z-10 w-full max-w-5xl px-6 pt-16 pb-24 flex flex-col items-center">
-        
-        {/* Top Premium Badge */}
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 border border-white/10 shadow-lg mb-6 backdrop-blur-md animate-fade-in">
-          <Bus size={14} className="text-amber-500" />
-          <span className="text-[10px] font-black uppercase tracking-wider text-slate-300">
-            Réseau AXO • Bassin de Creil
-          </span>
-        </div>
+      {/* Subtle ambient glow */}
+      <div className="absolute top-[-120px] left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-amber-500/8 blur-[160px] rounded-full pointer-events-none" />
 
-        {/* Hero Header */}
-        <div className="text-center max-w-2xl mb-12 space-y-4">
-          <h1 className="text-4xl md:text-5xl font-black tracking-tight text-white">
-            Portail de Mobilité <br className="hidden sm:inline" />
-            <span className="bg-gradient-to-r from-amber-400 via-amber-500 to-gold text-transparent bg-clip-text drop-shadow-[0_2px_15px_rgba(245,158,11,0.2)]">
-              AXO Live
+      <div className="relative z-10 w-full max-w-sm flex flex-col items-center">
+
+        {/* Logo / Brand */}
+        <div className="mb-10 text-center">
+          <h1 className="text-4xl font-black tracking-tight">
+            <span className="bg-gradient-to-r from-amber-400 to-amber-600 text-transparent bg-clip-text">
+              AXO
             </span>
+            <span className="text-white"> Live</span>
           </h1>
-          <p className="text-sm md:text-base text-slate-400 font-medium leading-relaxed max-w-lg mx-auto">
-            Accédez à toutes vos informations de déplacement en direct. Suivez le trafic, planifiez vos trajets et consultez les horaires temps réel en un instant.
+          <p className="text-xs text-slate-500 font-semibold mt-2 tracking-wide">
+            Réseau de bus • Bassin de Creil
           </p>
         </div>
 
-        {/* Active Alert Banner if any */}
-        {alertCount > 0 && (
-          <div className="w-full mb-8 bg-red-500/10 border border-red-500/20 rounded-2xl p-4 flex items-start gap-3 backdrop-blur-xl shadow-lg animate-pulse">
-            <AlertCircle size={20} className="text-red-400 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h4 className="text-xs font-bold text-red-400 uppercase tracking-wide">
-                Perturbations en cours ({alertCount})
-              </h4>
-              <p className="text-xs text-slate-300 mt-1 line-clamp-1">
-                {activeAlerts[0]?.header_text || "Des perturbations affectent actuellement le réseau de bus AXO."}
-              </p>
-              <Link href="/supervision" className="text-[10px] font-bold text-red-400 hover:underline flex items-center gap-1 mt-2">
-                Voir toutes les alertes infos trafic <ArrowRight size={10} />
-              </Link>
-            </div>
-          </div>
-        )}
 
-        {/* 2x2 Interactive Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full mt-2">
-          {tools.map((tool, idx) => {
-            const IconComponent = tool.icon;
+        {/* Navigation Grid */}
+        <div className="grid grid-cols-2 gap-3 w-full">
+          {navItems.map((item) => {
+            const Icon = item.icon;
             return (
-              <Link 
-                key={idx}
-                href={tool.href}
-                className="group relative flex flex-col justify-between bg-slate-900/40 hover:bg-slate-900/80 border border-white/5 hover:border-amber-500/30 rounded-3xl p-6 md:p-8 transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-[0_10px_30px_rgba(245,158,11,0.06)] backdrop-blur-md overflow-hidden"
+              <Link
+                key={item.href}
+                href={item.href}
+                className="group relative flex flex-col items-center text-center bg-slate-900/60 hover:bg-slate-800/80 border border-white/5 hover:border-white/10 rounded-2xl p-5 transition-all duration-200 active:scale-[0.97]"
               >
-                {/* Visual Glass Glow inside card */}
-                <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-white/5 to-transparent blur-2xl rounded-full pointer-events-none group-hover:scale-125 transition-transform duration-500" />
-                
-                <div>
-                  {/* Card Top Row */}
-                  <div className="flex justify-between items-start mb-6">
-                    <div className={`p-4.5 rounded-2xl bg-slate-950 border border-white/5 text-amber-500 transition-transform duration-300 group-hover:scale-110 shadow-inner flex items-center justify-center`}>
-                      <IconComponent size={24} className="text-amber-500" />
-                    </div>
-                    
-                    <div className="flex flex-col items-end gap-1.5">
-                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-500 group-hover:text-amber-500 transition-colors">
-                        {tool.tag}
-                      </span>
-                      <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border ${tool.badgeColor}`}>
-                        {tool.badge}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Card Typography */}
-                  <h3 className="text-lg font-bold text-slate-100 group-hover:text-white tracking-wide transition-colors">
-                    {tool.name}
-                  </h3>
-                  
-                  <p className="text-xs text-slate-400 font-semibold leading-relaxed mt-2.5">
-                    {tool.description}
-                  </p>
+                {/* Icon */}
+                <div 
+                  className="w-12 h-12 rounded-xl flex items-center justify-center mb-3 transition-transform duration-200 group-hover:scale-110"
+                  style={{ 
+                    backgroundColor: `${item.color}15`,
+                    boxShadow: `0 0 20px ${item.color}10`,
+                  }}
+                >
+                  <Icon size={22} style={{ color: item.color }} />
                 </div>
 
-                {/* Card Action footer */}
-                <div className="flex items-center gap-1.5 text-xs font-bold text-amber-500/70 group-hover:text-amber-400 mt-6 transition-colors">
-                  Accéder à l'outil 
-                  <ArrowRight size={14} className="transition-transform duration-300 group-hover:translate-x-1" />
-                </div>
+                {/* Text */}
+                <h2 className="text-sm font-bold text-white tracking-wide">
+                  {item.name}
+                </h2>
+                <p className="text-[10px] text-slate-500 font-medium mt-0.5 leading-tight">
+                  {item.subtitle}
+                </p>
               </Link>
             );
           })}
         </div>
 
-        {/* Live Network Status Widget */}
-        <div className="w-full mt-12 bg-slate-900/30 border border-white/5 rounded-3xl p-6 backdrop-blur-md flex flex-col sm:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-3.5">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
-              <Clock size={18} />
+        {/* Live Info Chips */}
+        <div className="flex flex-col gap-2 w-full mt-6">
+          {/* Bus count chip */}
+          <div className="flex items-center gap-3 bg-slate-900/50 border border-white/5 rounded-xl px-4 py-2.5">
+            <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+              <Bus size={16} className="text-blue-400" />
             </div>
-            <div>
-              <h4 className="text-sm font-bold text-slate-200">État général du réseau AXO</h4>
-              <p className="text-xs text-slate-500 font-semibold mt-0.5">
-                Données GTFS-RT provenant de l'autorité Oise Mobilité
-              </p>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-6">
-            <div className="text-center sm:text-right">
-              <div className="text-base font-black text-slate-200">En direct</div>
-              <div className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">Mises à jour: ~20s</div>
-            </div>
-            <div className="h-8 w-px bg-white/10 hidden sm:block" />
-            <div className="flex items-center gap-2">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            <div className="flex-1 min-w-0">
+              <span className="text-xs font-bold text-slate-200">
+                {busCount > 0 ? `${busCount} bus en circulation` : "Aucun bus en ligne"}
               </span>
-              <span className="text-xs font-bold text-emerald-400">Système opérationnel</span>
             </div>
+            <span className="relative flex h-2 w-2 shrink-0">
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${busCount > 0 ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${busCount > 0 ? 'bg-emerald-500' : 'bg-slate-600'}`} />
+            </span>
           </div>
+
+          {alertCount > 0 ? (
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-2 px-1 mb-0.5">
+                <AlertCircle size={12} className="text-red-400" />
+                <span className="text-[10px] font-bold text-red-400 uppercase tracking-wider">
+                  {alertCount} alerte{alertCount > 1 ? 's' : ''} en cours
+                </span>
+              </div>
+              {(alertsData?.alerts || []).map((alert: any, idx: number) => {
+                // Determine primary line color
+                const primaryLine = alert.impactedLines?.[0]?.replace(' ', '');
+                const hexColor = primaryLine ? (LINE_COLORS[primaryLine] || "#ef4444") : "#ef4444";
+
+                return (
+                  <Link
+                    key={`${alert.id}-${idx}`}
+                    href="/supervision"
+                    className="flex flex-col gap-1.5 rounded-2xl px-4 py-3 active:scale-[0.98] transition-transform backdrop-blur-md border shadow-sm"
+                    style={{
+                      backgroundColor: "rgba(2, 6, 23, 0.4)", // Dark glass
+                      borderColor: `${hexColor}25`,
+                    }}
+                  >
+                    <span className="text-[12px] font-black text-white leading-snug line-clamp-2 tracking-wide uppercase">
+                      {alert.title}
+                    </span>
+                    {alert.impactedLines?.length > 0 && (
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                        {alert.impactedLines.map((line: string, i: number) => {
+                          const badgeHex = LINE_COLORS[line.replace(' ', '')] || hexColor;
+                          return (
+                            <span 
+                              key={i} 
+                              className="text-[10px] font-black px-1.5 py-0.5 rounded shadow-sm tracking-wider"
+                              style={{
+                                backgroundColor: `${badgeHex}20`,
+                                color: badgeHex
+                              }}
+                            >
+                              Ligne {line}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 bg-slate-900/50 border border-white/5 rounded-xl px-4 py-2.5">
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+                <AlertCircle size={16} className="text-emerald-400" />
+              </div>
+              <span className="text-xs font-bold text-slate-200">Aucune perturbation</span>
+            </div>
+          )}
         </div>
 
+        {/* Live status footer */}
+        <div className="flex flex-col items-center gap-2 mt-6">
+          <span className="text-[10px] font-semibold text-slate-600">
+            Données en temps réel • Oise Mobilité
+          </span>
+          <Link
+            href="/about"
+            className="text-[10px] font-semibold text-slate-500 hover:text-amber-500 transition-colors underline underline-offset-2 decoration-slate-700"
+          >
+            À propos & mentions légales
+          </Link>
+        </div>
       </div>
     </div>
   );

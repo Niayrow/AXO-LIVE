@@ -7,6 +7,28 @@ import { AlertTriangle, Loader2, Signal } from "lucide-react";
 
 const AVAILABLE_LINES = ["A", "B", "C1", "C2", "D"];
 
+const formatAlertDateRange = (start?: string, end?: string) => {
+  if (!start && !end) return "";
+  
+  const formatDate = (dateStr: string) => {
+    const d = new Date(dateStr);
+    const day = d.getDate().toString().padStart(2, '0');
+    const month = (d.getMonth() + 1).toString().padStart(2, '0');
+    const hours = d.getHours().toString().padStart(2, '0');
+    const minutes = d.getMinutes().toString().padStart(2, '0');
+    return `${day}/${month} À ${hours}H${minutes}`;
+  };
+
+  if (start && end) {
+    return `DU ${formatDate(start)} AU ${formatDate(end)}`;
+  } else if (start) {
+    return `À PARTIR DU ${formatDate(start)}`;
+  } else if (end) {
+    return `JUSQU'AU ${formatDate(end)}`;
+  }
+  return "";
+};
+
 const LINE_COLORS: Record<string, { bg: string, text: string, border: string, shadow: string, hex: string }> = {
   "A": { bg: "bg-red-500/20", text: "text-red-400", border: "border-red-400/50", shadow: "shadow-[0_0_15px_rgba(239,68,68,0.2)]", hex: "#ef4444" },
   "B": { bg: "bg-blue-500/20", text: "text-blue-400", border: "border-blue-400/50", shadow: "shadow-[0_0_15px_rgba(59,130,246,0.2)]", hex: "#3b82f6" },
@@ -56,6 +78,10 @@ export default function SupervisionPage() {
     (v: any) => v.route_id === staticData?.route_id || v.route_id === selectedLine
   ) || [];
 
+  const lineAlerts = alertsData?.alerts?.filter((alert: any) => 
+    alert.impactedLines?.some((line: string) => line === selectedLine || line.replace(' ', '') === selectedLine.replace(' ', ''))
+  ) || [];
+
   return (
     <div className="min-h-full flex flex-col bg-slate-950 text-white">
       {/* Fixed Header with Line Selector */}
@@ -103,15 +129,77 @@ export default function SupervisionPage() {
         </div>
       </header>
 
-      {/* Alerts Banner */}
-      {alertsData?.alerts && alertsData.alerts.length > 0 && (
-        <div className="px-6 py-3 mt-4 mx-4 rounded-2xl bg-orange-500/10 border border-orange-500/30 flex items-start gap-3 shadow-lg">
-          <AlertTriangle className="text-orange-400 shrink-0 mt-0.5" size={20} />
-          <div>
-            <h4 className="text-orange-400 font-bold text-sm tracking-wide">Déviations en cours</h4>
-            <p className="text-orange-400/80 text-xs mt-1 font-medium leading-relaxed">
-              {alertsData.alerts.length} alerte(s) signalée(s) sur le réseau Creil Sud Oise.
-            </p>
+      {/* Line Alerts List */}
+      {lineAlerts.length > 0 && (
+        <div className="px-4 mt-6 flex flex-col gap-4">
+          <div className="flex items-center gap-2 pl-2">
+            <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
+            <span className="text-[10px] font-black text-orange-500 uppercase tracking-widest">
+              Info Trafic
+            </span>
+          </div>
+          
+          <div className="flex flex-col gap-3">
+            {lineAlerts.map((alert: any, idx: number) => {
+              const hexColor = LINE_COLORS[selectedLine]?.hex || "#f59e0b";
+              const dateRangeStr = formatAlertDateRange(alert.startTime, alert.endTime);
+
+              return (
+                <div 
+                  key={`${alert.id}-${idx}`}
+                  className="rounded-2xl p-5 border backdrop-blur-md"
+                  style={{
+                    backgroundColor: "rgba(2, 6, 23, 0.6)", // premium slate-950 transparency
+                    borderColor: `${hexColor}30`,
+                    boxShadow: `0 4px 20px ${hexColor}05`,
+                  }}
+                >
+                  <div className="flex gap-4">
+                    {/* Icon */}
+                    <div 
+                      className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border"
+                      style={{
+                        backgroundColor: `${hexColor}10`,
+                        borderColor: `${hexColor}20`,
+                      }}
+                    >
+                      <AlertTriangle size={18} style={{ color: hexColor }} />
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex flex-col pt-0.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-bold text-white text-sm leading-tight">
+                          {alert.title}
+                        </h3>
+                        <div 
+                          className="px-2 py-0.5 rounded text-[11px] font-black tracking-wider shadow-sm"
+                          style={{
+                            backgroundColor: hexColor,
+                            color: "#ffffff" // Ensuring white text for contrast on badge
+                          }}
+                        >
+                          {selectedLine}
+                        </div>
+                      </div>
+                      
+                      {dateRangeStr && (
+                        <p 
+                          className="text-[10px] font-bold uppercase tracking-wider mt-1.5"
+                          style={{ color: hexColor }}
+                        >
+                          {dateRangeStr}
+                        </p>
+                      )}
+
+                      <p className="text-slate-300 text-[13px] mt-3 leading-relaxed">
+                        {alert.description}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

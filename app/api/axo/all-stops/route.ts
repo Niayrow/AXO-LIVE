@@ -8,11 +8,12 @@ let cachedAllStops: any[] | null = null;
 let lastCacheTime = 0;
 const CACHE_TTL = 1000 * 60 * 60 * 24; // 24 hours
 
-const TARGET_LINES = ["A", "B", "C1", "C2", "D"];
+const TARGET_LINES = ["A", "B", "C1", "C2", "D", "E", "EXAL", "F", "S1", "S2", "S3", "S5", "S6", "S7"];
 
 export async function GET(req: NextRequest) {
   try {
-    if (!cachedAllStops || Date.now() - lastCacheTime > CACHE_TTL) {
+    const hasNewLines = cachedAllStops?.some((s: any) => s.lines.includes("E"));
+    if (!cachedAllStops || !hasNewLines || Date.now() - lastCacheTime > CACHE_TTL) {
       const response = await fetch(GTFS_STATIC_URL);
       if (!response.ok) {
         throw new Error(`Failed to fetch GTFS static: ${response.statusText}`);

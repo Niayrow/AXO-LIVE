@@ -4,7 +4,7 @@ import Papa from "papaparse";
 
 const GTFS_STATIC_URL = "https://api.oisemob.cityway.fr/dataflow/offre-tc/download?provider=AXO&dataFormat=GTFS&dataProfil=OPENDATA";
 
-const TARGET_LINES = ["A", "B", "C1", "C2", "D"];
+const TARGET_LINES = ["A", "B", "C1", "C2", "D", "E", "EXAL", "F", "S1", "S2", "S3", "S5", "S6", "S7"];
 
 // Cache to hold the downloaded and parsed GTFS data in memory
 let cachedShapesData: any = null;
@@ -13,7 +13,8 @@ const CACHE_TTL = 1000 * 60 * 60 * 24; // 24 hours
 
 export async function GET(req: NextRequest) {
   try {
-    if (!cachedShapesData || Date.now() - lastCacheTime > CACHE_TTL) {
+    const hasNewLines = cachedShapesData?.some((s: any) => s.route_id === "E");
+    if (!cachedShapesData || !hasNewLines || Date.now() - lastCacheTime > CACHE_TTL) {
       // 1. Download GTFS ZIP
       const response = await fetch(GTFS_STATIC_URL);
       if (!response.ok) {

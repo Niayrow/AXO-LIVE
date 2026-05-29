@@ -9,35 +9,41 @@ const GTFS_STATIC_URL = "https://api.oisemob.cityway.fr/dataflow/offre-tc/downlo
 
 export const dynamic = 'force-dynamic';
 
-let cachedTrips: any[] | null = null;
+let cachedStaticData: { trips: any[]; routes: any[] } | null = null;
 let lastCacheTime = 0;
 const CACHE_TTL = 1000 * 60 * 60 * 24; // 24 hours
 
-async function getTrips() {
-  if (!cachedTrips || Date.now() - lastCacheTime > CACHE_TTL) {
+async function getStaticData() {
+  if (!cachedStaticData || Date.now() - lastCacheTime > CACHE_TTL) {
     try {
       const response = await fetch(GTFS_STATIC_URL);
       if (!response.ok) throw new Error("Failed to fetch static GTFS");
       const buffer = await response.arrayBuffer();
       const zip = new AdmZip(Buffer.from(buffer));
+      
       const tripsFile = zip.getEntry("trips.txt")?.getData().toString("utf8") || "";
-      cachedTrips = Papa.parse(tripsFile, { header: true }).data as any[];
+      const routesFile = zip.getEntry("routes.txt")?.getData().toString("utf8") || "";
+      
+      const trips = Papa.parse(tripsFile, { header: true }).data as any[];
+      const routes = Papa.parse(routesFile, { header: true }).data as any[];
+      
+      cachedStaticData = { trips, routes };
       lastCacheTime = Date.now();
     } catch (e) {
-      console.error("Failed to load static trips for realtime enrich:", e);
-      return cachedTrips || [];
+      console.error("Failed to load static GTFS for realtime enrich:", e);
+      return cachedStaticData || { trips: [], routes: [] };
     }
   }
-  return cachedTrips;
+  return cachedStaticData;
 }
 
 export async function GET(req: NextRequest) {
   try {
-    // Fetch both feeds concurrently + load static trips
-    const [vpResponse, tuResponse, staticTrips] = await Promise.all([
+    // Fetch both feeds concurrently + load static trips & routes
+    const [vpResponse, tuResponse, staticData] = await Promise.all([
       fetch(VEHICLE_POSITIONS_URL, { cache: "no-store" }),
       fetch(TRIP_UPDATES_URL, { cache: "no-store" }),
-      getTrips(),
+      getStaticData(),
     ]);
 
     if (!vpResponse.ok || !tuResponse.ok) {
@@ -65,13 +71,18 @@ export async function GET(req: NextRequest) {
       const currentStopStatus = vehicle?.currentStatus || 0;
 
       // Enrich with static trip headsign (direction/destination name)
-      const tripInfo = staticTrips?.find((t: any) => t.trip_id === trip?.tripId);
+      const tripInfo = staticData.trips?.find((t: any) => t.trip_id === trip?.tripId);
       const headsign = tripInfo?.trip_headsign || "Inconnue";
+      
+      // Resolve route_short_name from routes.txt
+      const rawRouteId = tripInfo?.route_id || trip?.routeId;
+      const routeInfo = staticData.routes?.find((r: any) => r.route_id === rawRouteId);
+      const routeShortName = routeInfo?.route_short_name || rawRouteId || "B";
       
       return {
         id: entity.id,
         vehicle_id: vehicle?.vehicle?.id,
-        route_id: trip?.routeId,
+        route_id: routeShortName, // Resolved route name (A, B, C1, C2, D)
         trip_id: trip?.tripId,
         direction_id: trip?.directionId,
         trip_headsign: headsign,
