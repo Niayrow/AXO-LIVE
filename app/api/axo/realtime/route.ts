@@ -7,7 +7,7 @@ const VEHICLE_POSITIONS_URL = "https://api.oisemob.cityway.fr/dataflow/vehicule-
 const TRIP_UPDATES_URL = "https://api.oisemob.cityway.fr/dataflow/horaire-tc-tr/download?provider=AXO&dataFormat=gtfs-rt";
 const GTFS_STATIC_URL = "https://api.oisemob.cityway.fr/dataflow/offre-tc/download?provider=AXO&dataFormat=GTFS&dataProfil=OPENDATA";
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 60; // Cache at the Edge for 1 minute
 
 let cachedStaticData: { trips: any[]; routes: any[] } | null = null;
 let lastCacheTime = 0;

@@ -225,7 +225,7 @@ export default function StopsPage() {
       if (!res.ok) throw new Error("Failed to fetch realtime data");
       return res.json();
     },
-    refetchInterval: 20000,
+    refetchInterval: 60000,
   });
 
   const stops = allStopsData?.stops || [];

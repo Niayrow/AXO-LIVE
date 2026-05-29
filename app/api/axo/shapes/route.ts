@@ -6,6 +6,8 @@ const GTFS_STATIC_URL = "https://api.oisemob.cityway.fr/dataflow/offre-tc/downlo
 
 const TARGET_LINES = ["A", "B", "C1", "C2", "D", "E", "EXAL", "F", "S1", "S2", "S3", "S5", "S6", "S7"];
 
+export const revalidate = 86400; // Cache at the Edge for 24 hours to eliminate Serverless Function invocations
+
 // Cache to hold the downloaded and parsed GTFS data in memory
 let cachedShapesData: any = null;
 let lastCacheTime = 0;

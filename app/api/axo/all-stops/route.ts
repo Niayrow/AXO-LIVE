@@ -10,6 +10,8 @@ const CACHE_TTL = 1000 * 60 * 60 * 24; // 24 hours
 
 const TARGET_LINES = ["A", "B", "C1", "C2", "D", "E", "EXAL", "F", "S1", "S2", "S3", "S5", "S6", "S7"];
 
+export const revalidate = 86400; // Cache at the Edge for 24 hours to eliminate Serverless Function invocations
+
 export async function GET(req: NextRequest) {
   try {
     const hasNewLines = cachedAllStops?.some((s: any) => s.lines.includes("E"));

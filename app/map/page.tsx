@@ -25,7 +25,7 @@ export default function MapPage() {
       if (!res.ok) throw new Error("Failed to fetch real-time data");
       return res.json();
     },
-    refetchInterval: 20000,
+    refetchInterval: 60000,
   });
 
   // Use memoization to prevent unnecessary re-renders of the map component

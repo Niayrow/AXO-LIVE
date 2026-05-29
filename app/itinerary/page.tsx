@@ -55,7 +55,7 @@ function NextLegDepartures({ stopName, lineId }: { stopName: string; lineId: str
       const res = await fetch("/api/axo/realtime");
       return res.json();
     },
-    refetchInterval: 20000,
+    refetchInterval: 60000,
   });
 
   // Combine realtime + static schedules

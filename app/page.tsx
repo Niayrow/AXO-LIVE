@@ -21,7 +21,7 @@ export default function Home() {
       if (!res.ok) return { alerts: [] };
       return res.json();
     },
-    refetchInterval: 60000,
+    refetchInterval: 1200000, // 20 minutes
   });
 
   const { data: realtimeData } = useQuery({
@@ -31,7 +31,7 @@ export default function Home() {
       if (!res.ok) return { vehicles: [] };
       return res.json();
     },
-    refetchInterval: 20000,
+    refetchInterval: 60000, // 1 minute
   });
 
   const alertCount = alertsData?.alerts?.length || 0;

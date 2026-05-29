@@ -59,7 +59,7 @@ export default function SupervisionPage() {
       if (!res.ok) throw new Error("Failed to fetch real-time data");
       return res.json();
     },
-    refetchInterval: 20000, // Poll every 20s
+    refetchInterval: 60000, // Poll every 1m
   });
 
   // Fetch alerts
@@ -70,7 +70,7 @@ export default function SupervisionPage() {
       if (!res.ok) throw new Error("Failed to fetch alerts");
       return res.json();
     },
-    refetchInterval: 60000,
+    refetchInterval: 1200000, // 20m
   });
 
   // Filter vehicles for the specific selected route

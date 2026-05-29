@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const ALERTS_URL = "https://api.oisemob.cityway.fr/disrupt/api/v1/fr/disruptions?networkIds=51&mediaType=Web";
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 1200; // Cache at the Edge for 20 minutes
 
 const decodeHtmlEntities = (text: string): string => {
     return text
