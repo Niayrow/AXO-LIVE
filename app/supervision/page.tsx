@@ -38,7 +38,14 @@ const LINE_COLORS: Record<string, { bg: string, text: string, border: string, sh
 };
 
 export default function SupervisionPage() {
-  const [selectedLine, setSelectedLine] = useState("A");
+  const [selectedLine, setSelectedLine] = useState(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const line = params.get("line");
+      if (line && AVAILABLE_LINES.includes(line)) return line;
+    }
+    return "A";
+  });
 
   // Fetch static line data (Stops sequence)
   const { data: staticData, isLoading: isStaticLoading } = useQuery({

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { 
   Map, 
@@ -8,12 +9,38 @@ import {
   Activity, 
   ArrowRight, 
   AlertCircle,
+  AlertTriangle,
   Bus,
+  X,
+  Calendar,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { LINE_COLORS } from "@/components/lineColors";
 
+const formatAlertDateRange = (start?: string, end?: string) => {
+  if (!start && !end) return "";
+  
+  const formatDate = (dateStr: string) => {
+    const d = new Date(dateStr);
+    const day = d.getDate().toString().padStart(2, '0');
+    const month = (d.getMonth() + 1).toString().padStart(2, '0');
+    const hours = d.getHours().toString().padStart(2, '0');
+    const minutes = d.getMinutes().toString().padStart(2, '0');
+    return `${day}/${month} À ${hours}H${minutes}`;
+  };
+
+  if (start && end) {
+    return `DU ${formatDate(start)} AU ${formatDate(end)}`;
+  } else if (start) {
+    return `À PARTIR DU ${formatDate(start)}`;
+  } else if (end) {
+    return `JUSQU'AU ${formatDate(end)}`;
+  }
+  return "";
+};
+
 export default function Home() {
+  const [activeAlert, setActiveAlert] = useState<any | null>(null);
   const { data: alertsData } = useQuery({
     queryKey: ["networkAlerts"],
     queryFn: async () => {
@@ -142,10 +169,10 @@ export default function Home() {
           </div>
 
           {alertCount > 0 ? (
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-2.5">
               <div className="flex items-center gap-2 px-1 mb-0.5">
-                <AlertCircle size={12} className="text-red-400" />
-                <span className="text-[10px] font-bold text-red-400 uppercase tracking-wider">
+                <AlertCircle size={12} className="text-red-400 animate-pulse" />
+                <span className="text-[10px] font-black text-red-400 uppercase tracking-widest">
                   {alertCount} alerte{alertCount > 1 ? 's' : ''} en cours
                 </span>
               </div>
@@ -153,31 +180,72 @@ export default function Home() {
                 // Determine primary line color
                 const primaryLine = alert.impactedLines?.[0]?.replace(' ', '');
                 const hexColor = primaryLine ? (LINE_COLORS[primaryLine] || "#ef4444") : "#ef4444";
+                const dateRangeStr = formatAlertDateRange(alert.startTime, alert.endTime);
 
                 return (
-                  <Link
+                  <button
                     key={`${alert.id}-${idx}`}
-                    href="/supervision"
-                    className="flex flex-col gap-1.5 rounded-2xl px-4 py-3 active:scale-[0.98] transition-transform backdrop-blur-md border shadow-sm"
+                    onClick={() => setActiveAlert(alert)}
+                    className="w-full text-left flex flex-col gap-2.5 rounded-2xl p-4 active:scale-[0.98] transition-all hover:bg-slate-900/50 backdrop-blur-md border shadow-md relative overflow-hidden group cursor-pointer"
                     style={{
                       backgroundColor: "rgba(2, 6, 23, 0.4)", // Dark glass
-                      borderColor: `${hexColor}25`,
+                      borderColor: `${hexColor}30`,
                     }}
                   >
-                    <span className="text-[12px] font-black text-white leading-snug line-clamp-2 tracking-wide uppercase">
+                    {/* Glowing highlight border on hover */}
+                    <div 
+                      className="absolute inset-0 opacity-0 group-hover:opacity-10 transition-opacity duration-300 pointer-events-none"
+                      style={{
+                        background: `radial-gradient(circle at 100% 0%, ${hexColor} 0%, transparent 60%)`
+                      }}
+                    />
+
+                    {/* Top Alert Label & Navigation Indicator */}
+                    <div className="flex items-center justify-between w-full">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle size={12} style={{ color: hexColor }} className="animate-pulse" />
+                        <span className="text-[9px] font-black uppercase tracking-widest" style={{ color: hexColor }}>
+                          Perturbation
+                        </span>
+                      </div>
+                      
+                      <span className="text-[9px] font-bold text-slate-500 group-hover:text-slate-300 transition-colors flex items-center gap-1 uppercase tracking-wider">
+                        Voir détails <ArrowRight size={10} className="transform group-hover:translate-x-0.5 transition-transform" />
+                      </span>
+                    </div>
+
+                    {/* Alert Title */}
+                    <h3 className="text-[13px] font-extrabold text-white leading-snug tracking-wide uppercase">
                       {alert.title}
-                    </span>
+                    </h3>
+
+                    {/* Active Dates */}
+                    {dateRangeStr && (
+                      <p className="text-[9px] font-bold uppercase tracking-wider leading-none" style={{ color: hexColor }}>
+                        {dateRangeStr}
+                      </p>
+                    )}
+
+                    {/* Text description snippet (truncated to 3 lines max) */}
+                    {alert.description && (
+                      <p className="text-[11px] text-slate-400 font-medium leading-relaxed line-clamp-3">
+                        {alert.description}
+                      </p>
+                    )}
+
+                    {/* Impacted lines badges */}
                     {alert.impactedLines?.length > 0 && (
-                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                         {alert.impactedLines.map((line: string, i: number) => {
                           const badgeHex = LINE_COLORS[line.replace(' ', '')] || hexColor;
                           return (
                             <span 
                               key={i} 
-                              className="text-[10px] font-black px-1.5 py-0.5 rounded shadow-sm tracking-wider"
+                              className="text-[9px] font-black px-2 py-0.5 rounded shadow-sm tracking-wider"
                               style={{
                                 backgroundColor: `${badgeHex}20`,
-                                color: badgeHex
+                                color: badgeHex,
+                                border: `1px solid ${badgeHex}30`
                               }}
                             >
                               Ligne {line}
@@ -186,7 +254,7 @@ export default function Home() {
                         })}
                       </div>
                     )}
-                  </Link>
+                  </button>
                 );
               })}
             </div>
@@ -213,6 +281,134 @@ export default function Home() {
           </Link>
         </div>
       </div>
+
+      {/* Premium Alert Detail Modal */}
+      {activeAlert && (() => {
+        const primaryLine = activeAlert.impactedLines?.[0]?.replace(' ', '');
+        const hexColor = primaryLine ? (LINE_COLORS[primaryLine] || "#ef4444") : "#ef4444";
+        const dateRangeStr = formatAlertDateRange(activeAlert.startTime, activeAlert.endTime);
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
+            {/* Backdrop with intense blur */}
+            <div 
+              className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm cursor-pointer"
+              onClick={() => setActiveAlert(null)}
+            />
+
+            {/* Modal Box */}
+            <div 
+              className="relative w-full max-w-sm bg-slate-900 border rounded-3xl p-6 shadow-2xl overflow-hidden z-10 flex flex-col gap-4 animate-scale-up"
+              style={{
+                borderColor: `${hexColor}30`,
+                boxShadow: `0 10px 40px -10px ${hexColor}30, 0 0 50px -10px rgba(0,0,0,0.5)`,
+              }}
+            >
+              {/* Decorative side ambient glow */}
+              <div 
+                className="absolute top-0 right-0 w-32 h-32 blur-[60px] rounded-full pointer-events-none opacity-20"
+                style={{ backgroundColor: hexColor }}
+              />
+
+              {/* Header: Title and Close button */}
+              <div className="flex justify-between items-start gap-4">
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <div 
+                      className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border"
+                      style={{
+                        backgroundColor: `${hexColor}10`,
+                        borderColor: `${hexColor}30`,
+                      }}
+                    >
+                      <AlertTriangle size={14} style={{ color: hexColor }} />
+                    </div>
+                    <span className="text-[10px] font-black uppercase tracking-wider" style={{ color: hexColor }}>
+                      Perturbation Réseau
+                    </span>
+                  </div>
+                </div>
+                
+                <button 
+                  onClick={() => setActiveAlert(null)}
+                  className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all flex items-center justify-center border border-white/5 active:scale-95"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Main Content */}
+              <div className="flex flex-col gap-3">
+                <h2 className="text-[15px] font-black text-white uppercase tracking-wide leading-snug">
+                  {activeAlert.title}
+                </h2>
+
+                {dateRangeStr && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <Calendar size={12} style={{ color: hexColor }} />
+                    <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: hexColor }}>
+                      {dateRangeStr}
+                    </span>
+                  </div>
+                )}
+
+                <div className="h-px bg-white/10 my-1" />
+
+                <div className="max-h-[220px] overflow-y-auto pr-1 select-text scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
+                  <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line font-medium">
+                    {activeAlert.description || "Aucun détail supplémentaire fourni pour cette perturbation."}
+                  </p>
+                </div>
+              </div>
+
+              {/* Impacted Lines & Action Button */}
+              <div className="flex flex-col gap-4 mt-2">
+                {activeAlert.impactedLines?.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                      Lignes Impactées :
+                    </span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {activeAlert.impactedLines.map((line: string, i: number) => {
+                        const badgeHex = LINE_COLORS[line.replace(' ', '')] || hexColor;
+                        return (
+                          <span 
+                            key={i} 
+                            className="text-[10px] font-black px-2.5 py-1 rounded-lg shadow-sm tracking-wider"
+                            style={{
+                              backgroundColor: `${badgeHex}15`,
+                              color: badgeHex,
+                              border: `1px solid ${badgeHex}40`
+                            }}
+                          >
+                            Ligne {line}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => {
+                    setActiveAlert(null);
+                    const lineToSupervise = activeAlert.impactedLines?.[0] || "";
+                    window.location.href = `/supervision?line=${encodeURIComponent(lineToSupervise)}`;
+                  }}
+                  className="w-full h-11 rounded-2xl flex items-center justify-center gap-2 font-extrabold text-xs transition-all active:scale-[0.98] shadow-lg text-white"
+                  style={{
+                    background: `linear-gradient(135deg, ${hexColor}cc, ${hexColor})`,
+                    boxShadow: `0 4px 15px -3px ${hexColor}50`,
+                  }}
+                >
+                  <Activity size={14} />
+                  Suivre la ligne en direct
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

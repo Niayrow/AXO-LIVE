@@ -46,16 +46,23 @@ export async function GET(req: NextRequest) {
       getStaticData(),
     ]);
 
-    if (!vpResponse.ok || !tuResponse.ok) {
-      throw new Error("Failed to fetch GTFS-RT data");
-    }
+    // Handle 204 No Content or non-OK responses (API returns 204 when no vehicles are active, e.g. outside service hours)
+    const vpBuffer = vpResponse.ok && vpResponse.status !== 204 ? await vpResponse.arrayBuffer() : null;
+    const tuBuffer = tuResponse.ok && tuResponse.status !== 204 ? await tuResponse.arrayBuffer() : null;
 
-    const vpBuffer = await vpResponse.arrayBuffer();
-    const tuBuffer = await tuResponse.arrayBuffer();
+    // If vehicle positions feed is empty, return early with no vehicles
+    if (!vpBuffer || vpBuffer.byteLength === 0) {
+      return NextResponse.json({
+        timestamp: Date.now(),
+        vehicles: [],
+      });
+    }
 
     // Decode Protobuf
     const vpFeed = GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(new Uint8Array(vpBuffer));
-    const tuFeed = GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(new Uint8Array(tuBuffer));
+    const tuFeed = tuBuffer && tuBuffer.byteLength > 0
+      ? GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(new Uint8Array(tuBuffer))
+      : { entity: [] };
 
     // Combine and structure the data for mobile client
     const vehicles = vpFeed.entity.map((entity: any) => {
