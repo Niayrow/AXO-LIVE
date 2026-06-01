@@ -1194,7 +1194,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
       <div
         className={`fixed z-50 transition-all duration-300 ease-out 
           /* Mobile styles */
-          bottom-20 left-0 right-0 h-[38vh] w-full 
+          bottom-[76px] left-0 right-0 h-[48vh] max-h-[390px] w-full 
           /* Desktop floating sidebar styles */
           md:bottom-24 md:left-6 md:right-auto md:w-[380px] md:h-[calc(100vh-220px)] md:max-h-[580px]
           ${(selectedBus || selectedStop) 
@@ -1202,20 +1202,20 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
             : "translate-y-[calc(100%+80px)] md:scale-95 md:opacity-0 md:translate-y-0 opacity-0 pointer-events-none"
           }`}
       >
-        <div className="h-full bg-slate-950/92 backdrop-blur-3xl border-t md:border border-white/10 rounded-t-[32px] md:rounded-[24px] p-5 shadow-[0_-15px_30px_rgba(0,0,0,0.5)] md:shadow-[0_20px_50px_rgba(0,0,0,0.6)] flex flex-col gap-3.5 overflow-hidden">
+        <div className="h-full bg-slate-950/92 backdrop-blur-3xl border-t md:border border-white/10 rounded-t-[32px] md:rounded-[24px] p-3.5 md:p-5 shadow-[0_-15px_30px_rgba(0,0,0,0.5)] md:shadow-[0_20px_50px_rgba(0,0,0,0.6)] flex flex-col gap-2 md:gap-3.5 overflow-hidden">
           {/* Drag Handle Indicator */}
-          <div className="w-12 h-1 bg-white/20 rounded-full mx-auto shrink-0 mb-1 md:hidden" />
+          <div className="w-12 h-1 bg-white/20 rounded-full mx-auto shrink-0 mb-0.5 md:hidden" />
 
           {/* CONTENT FOR SELECTED BUS */}
           {selectedBus && (
             <>
               {/* Airy & Premium Header Row */}
-              <div className="flex flex-col gap-3 shrink-0 pb-3 border-b border-white/5">
+              <div className="flex flex-col gap-2 md:gap-3 shrink-0 pb-2 md:pb-3 border-b border-white/5">
                 <div className="flex justify-between items-start w-full">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 md:gap-3">
                     {/* Route Badge */}
                     <div
-                      className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg border shadow-lg"
+                      className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center font-black text-base md:text-lg border shadow-lg"
                       style={{
                         backgroundColor: `${getLineColor(selectedBus.route_id)}25`,
                         color: getLineColor(selectedBus.route_id),
@@ -1228,11 +1228,11 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                     
                     {/* Bus Name & Type */}
                     <div className="flex flex-col gap-0.5">
-                      <h3 className="text-lg font-black text-white tracking-wide leading-tight">
+                      <h3 className="text-base md:text-lg font-black text-white tracking-wide leading-tight">
                         Bus {formatBusName(selectedBus.vehicle_id || "Inconnu")}
                       </h3>
                       <div>
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-wider ${
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md md:rounded-lg text-[7px] md:text-[8px] font-black uppercase tracking-wider ${
                           getVehicleType(selectedBus.vehicle_id || "") === "Articulé"
                             ? "bg-amber-500/15 border border-amber-500/30 text-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.15)] animate-pulse"
                             : "bg-slate-800 border border-slate-700 text-slate-400"
@@ -1246,23 +1246,23 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                   {/* Close button */}
                   <button
                     onClick={() => setSelectedBusId(null)}
-                    className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-800/80 hover:bg-slate-700/80 text-slate-400 hover:text-white transition-all border border-white/5 shadow-md active:scale-95"
+                    className="w-8 h-8 md:w-10 md:h-10 flex items-center justify-center rounded-full bg-slate-800/80 hover:bg-slate-700/80 text-slate-400 hover:text-white transition-all border border-white/5 shadow-md active:scale-95"
                   >
-                    <X size={18} />
+                    <X size={15} className="md:w-[18px] md:h-[18px]" />
                   </button>
                 </div>
 
                 {/* Second Row: Real-time stop status */}
                 {currentStopInfo?.name && (
                   <div className="w-full">
-                    <span className={`inline-flex w-full items-center gap-2 px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border ${
+                    <span className={`inline-flex w-full items-center gap-1.5 px-2.5 py-1 rounded-lg md:rounded-xl text-[8px] md:text-[9px] font-black uppercase tracking-widest border ${
                       currentStopInfo.status === 1 
                         ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" 
                         : "bg-cyan-500/10 border-cyan-500/20 text-cyan-400"
                     }`}>
-                      <span className="relative flex h-2 w-2">
+                      <span className="relative flex h-1.5 w-1.5">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-current opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-current"></span>
+                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-current"></span>
                       </span>
                       {currentStopInfo.status === 1 ? "À l'arrêt" : "En approche de"} : {currentStopInfo.name}
                     </span>
@@ -1270,8 +1270,8 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                 )}
 
                 {/* Third Row: Destination Info */}
-                <div className="flex items-center gap-2 bg-slate-950/60 border border-white/5 rounded-xl px-3 py-1.5">
-                  <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest shrink-0">
+                <div className="flex items-center gap-2 bg-slate-950/60 border border-white/5 rounded-lg md:rounded-xl px-2.5 py-1 md:py-1.5">
+                  <span className="text-[7.5px] md:text-[8px] font-black text-slate-500 uppercase tracking-widest shrink-0">
                     DIRECTION
                   </span>
                   <span className="text-xs font-bold text-amber-500 font-mono uppercase tracking-wide truncate">
@@ -1443,41 +1443,41 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
           {selectedStop && (
             <>
               <div className="flex justify-between items-start shrink-0">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-slate-800 text-slate-300 border border-slate-700">
-                    <MapPin size={24} />
+                <div className="flex items-center gap-2.5 md:gap-3">
+                  <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center bg-slate-800 text-slate-300 border border-slate-700">
+                    <MapPin size={20} className="md:w-6 md:h-6" />
                   </div>
                   <div>
-                    <div className="bg-black border border-slate-800 rounded-xl px-4 py-2 shadow-[inset_0_2px_8px_rgba(0,0,0,0.8)] relative overflow-hidden flex items-center justify-between min-w-[200px]">
+                    <div className="bg-black border border-slate-800 rounded-lg md:rounded-xl px-3 py-1.5 md:px-4 md:py-2 shadow-[inset_0_2px_8px_rgba(0,0,0,0.8)] relative overflow-hidden flex items-center justify-between min-w-[150px] md:min-w-[200px]">
                       {/* Ambient grid texture overlay to simulate LED display */}
                       <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[size:100%_4px,6px_100%] pointer-events-none" />
                       
                       <div className="relative z-10 flex flex-col">
-                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">
+                        <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">
                           Arrêt Physique
                         </span>
-                        <span className="text-sm md:text-base font-black font-mono text-cyan-400 uppercase tracking-wider leading-tight drop-shadow-[0_0_6px_rgba(34,211,238,0.85)]">
+                        <span className="text-xs md:text-sm font-black font-mono text-cyan-400 uppercase tracking-wider leading-tight drop-shadow-[0_0_6px_rgba(34,211,238,0.85)] truncate max-w-[110px] md:max-w-[160px]">
                           {selectedStop.stop_name}
                         </span>
                       </div>
                       
                       {/* Led indicators on the right of the sign */}
-                      <div className="relative z-10 flex gap-1.5 pl-4 border-l border-slate-800/80 shrink-0">
-                        <span className="w-1.5 h-1.5 rounded-full bg-cyan-500/30 animate-pulse" />
-                        <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 drop-shadow-[0_0_4px_rgba(34,211,238,0.85)]" />
+                      <div className="relative z-10 flex gap-1 pl-3 border-l border-slate-800/80 shrink-0">
+                        <span className="w-1 h-1 rounded-full bg-cyan-500/30 animate-pulse" />
+                        <span className="w-1 h-1 rounded-full bg-cyan-400 drop-shadow-[0_0_4px_rgba(34,211,238,0.85)]" />
                       </div>
                     </div>
                   </div>
                 </div>
                 <button
                   onClick={() => setSelectedStopId(null)}
-                  className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-800/80 text-slate-400 hover:text-white transition-colors border border-white/5"
+                  className="w-8 h-8 md:w-10 md:h-10 flex items-center justify-center rounded-full bg-slate-800/80 text-slate-400 hover:text-white transition-colors border border-white/5 active:scale-95"
                 >
-                  <X size={20} />
+                  <X size={15} />
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto no-scrollbar rounded-xl bg-slate-950/50 border border-white/5 p-4 mt-2">
+              <div className="flex-1 overflow-y-auto no-scrollbar rounded-xl bg-slate-950/50 border border-white/5 p-3 md:p-4 mt-1.5 md:mt-2">
                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
                   <Bus size={14} />
                   Prochains passages
