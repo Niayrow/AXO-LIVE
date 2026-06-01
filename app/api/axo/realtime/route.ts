@@ -107,18 +107,20 @@ export async function GET(req: NextRequest) {
         timestamp: vehicle?.timestamp?.low,
         // Delay information from trip updates (first stop time update delay)
         delay: tripUpdate?.stopTimeUpdate?.[0]?.departure?.delay || tripUpdate?.stopTimeUpdate?.[0]?.arrival?.delay || 0,
-        stop_time_updates: tripUpdate?.stopTimeUpdate?.map((stu: any) => ({
-          stop_sequence: stu.stopSequence,
-          stop_id: stu.stopId,
-          arrival: stu.arrival ? {
-            delay: stu.arrival.delay,
-            time: stu.arrival.time?.low,
-          } : null,
-          departure: stu.departure ? {
-            delay: stu.departure.delay,
-            time: stu.departure.time?.low,
-          } : null,
-        })) || []
+        stop_time_updates: tripUpdate?.stopTimeUpdate
+          ? (tripUpdate.stopTimeUpdate as any[])
+              .filter((stu: any) => !vehicle?.currentStopSequence || stu.stopSequence >= vehicle.currentStopSequence)
+              .map((stu: any) => ({
+                stop_sequence: stu.stopSequence,
+                stop_id: stu.stopId,
+                arrival: stu.arrival?.time?.low || stu.arrival?.time
+                  ? { time: Number(stu.arrival.time?.low || stu.arrival.time) }
+                  : null,
+                departure: stu.departure?.time?.low || stu.departure?.time
+                  ? { time: Number(stu.departure.time?.low || stu.departure.time) }
+                  : null,
+              }))
+          : []
       };
     });
 
