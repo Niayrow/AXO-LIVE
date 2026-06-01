@@ -1194,7 +1194,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
       <div
         className={`fixed z-50 transition-all duration-300 ease-out 
           /* Mobile styles */
-          bottom-[76px] left-0 right-0 h-[48vh] max-h-[390px] w-full 
+          bottom-[76px] left-0 right-0 h-[50vh] max-h-[400px] w-full 
           /* Desktop floating sidebar styles */
           md:bottom-24 md:left-6 md:right-auto md:w-[380px] md:h-[calc(100vh-220px)] md:max-h-[580px]
           ${(selectedBus || selectedStop) 
@@ -1296,7 +1296,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                   Trajet en temps réel
                 </h4>
 
-                <div className="relative pl-6 border-l-2 border-slate-800 space-y-3.5">
+                <div className="relative pl-6 border-l-2 border-slate-800 space-y-2 md:space-y-3.5">
                   {!staticData?.stops && (
                     <div className="text-slate-500 text-xs animate-pulse">Chargement du trajet...</div>
                   )}
@@ -1348,7 +1348,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                     if (isPassed && stopSeq < currentSeq - 1) return null;
 
                     return (
-                      <div key={stop.stop_id} className="relative flex items-center justify-between min-h-[30px] py-1">
+                      <div key={stop.stop_id} className="relative flex items-center justify-between min-h-[26px] md:min-h-[30px] py-0.5 md:py-1">
                         {/* Static stop dot (Centered mathematically on the 2px border line) */}
                         <div className={`absolute -left-[29.5px] w-3.5 h-3.5 rounded-full border-2 z-10 ${dotClass}`} style={dotStyle} />
 
@@ -1473,7 +1473,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                   Prochains passages
                 </h4>
 
-                <div className="space-y-3">
+                <div className="space-y-1.5 md:space-y-3">
                   {upcomingBusesForStop.length === 0 ? (
                     <div className="text-sm text-slate-500 text-center py-4">
                       Aucun passage prévu dans l'immédiat.
@@ -1490,7 +1490,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                           onClick={() => {
                             setHighlightedBusId(b.vehicle.id);
                           }}
-                          className={`w-full flex items-center justify-between p-3.5 rounded-xl transition-all duration-300 hover:scale-[1.01] active:scale-[0.99] cursor-pointer text-left ${
+                          className={`w-full flex items-center justify-between p-2 md:p-3.5 rounded-lg md:rounded-xl transition-all duration-300 hover:scale-[1.01] active:scale-[0.99] cursor-pointer text-left ${
                             isFirst
                               ? "border-[1.5px] shadow-lg animate-pulse"
                               : "bg-slate-900 border border-white/5 hover:bg-slate-800/80"
@@ -1501,9 +1501,9 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                             boxShadow: `0 0 16px ${activeColor}25`
                           } : {}}
                         >
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2 md:gap-3">
                             <div
-                              className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs border shadow-inner"
+                              className="w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center font-bold text-xs border shadow-inner shrink-0"
                               style={{
                                 backgroundColor: `${activeColor}33`,
                                 color: activeColor,
