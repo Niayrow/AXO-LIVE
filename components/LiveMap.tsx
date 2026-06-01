@@ -1210,12 +1210,12 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
           {selectedBus && (
             <>
               {/* Airy & Premium Header Row */}
-              <div className="flex flex-col gap-2 md:gap-3 shrink-0 pb-2 md:pb-3 border-b border-white/5">
-                <div className="flex justify-between items-start w-full">
+              <div className="flex flex-col gap-1.5 md:gap-2 shrink-0 pb-1.5 md:pb-2.5 border-b border-white/5">
+                <div className="flex justify-between items-center w-full">
                   <div className="flex items-center gap-2 md:gap-3">
                     {/* Route Badge */}
                     <div
-                      className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center font-black text-base md:text-lg border shadow-lg"
+                      className="w-9 h-9 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center font-black text-sm md:text-lg border shadow-lg shrink-0"
                       style={{
                         backgroundColor: `${getLineColor(selectedBus.route_id)}25`,
                         color: getLineColor(selectedBus.route_id),
@@ -1226,19 +1226,38 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                       {selectedBus.route_id || "B"}
                     </div>
                     
-                    {/* Bus Name & Type */}
-                    <div className="flex flex-col gap-0.5">
-                      <h3 className="text-base md:text-lg font-black text-white tracking-wide leading-tight">
-                        Bus {formatBusName(selectedBus.vehicle_id || "Inconnu")}
-                      </h3>
-                      <div>
-                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md md:rounded-lg text-[7px] md:text-[8px] font-black uppercase tracking-wider ${
+                    {/* Bus Name, Delay & Type */}
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="text-sm md:text-lg font-black text-white tracking-wide leading-tight">
+                          Bus {formatBusName(selectedBus.vehicle_id || "Inconnu")}
+                        </h3>
+                        {/* Delay / On-time Status (Merged into header for maximum space savings!) */}
+                        {departureStatus ? (
+                          <span className="px-1.5 py-0.5 rounded text-[7px] md:text-[8px] font-black uppercase tracking-wider bg-amber-500/15 border border-amber-500/30 text-amber-400 animate-pulse">
+                            Départ {departureStatus.minutes}m
+                          </span>
+                        ) : (
+                          <span className={`px-1.5 py-0.5 rounded text-[7px] md:text-[8px] font-black uppercase tracking-wider border ${
+                            (selectedBus.delay || 0) > 60
+                              ? "bg-orange-500/15 border-orange-500/30 text-orange-400 shadow-[0_0_6px_rgba(249,115,22,0.15)]"
+                              : "bg-emerald-500/15 border-emerald-500/30 text-emerald-400 shadow-[0_0_6px_rgba(16,185,129,0.15)]"
+                          }`}>
+                            {(selectedBus.delay || 0) > 60 ? `+${Math.round((selectedBus.delay || 0) / 60)}m` : "À l'heure"}
+                          </span>
+                        )}
+                        <span className={`hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[7px] md:text-[8px] font-black uppercase tracking-wider ${
                           getVehicleType(selectedBus.vehicle_id || "") === "Articulé"
-                            ? "bg-amber-500/15 border border-amber-500/30 text-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.15)] animate-pulse"
+                            ? "bg-amber-500/15 border border-amber-500/30 text-amber-400"
                             : "bg-slate-800 border border-slate-700 text-slate-400"
                         }`}>
                           {getVehicleType(selectedBus.vehicle_id || "")}
                         </span>
+                      </div>
+                      
+                      {/* Direction Row (Directly nested under title to save space!) */}
+                      <div className="text-[10px] md:text-xs font-semibold text-slate-400 truncate max-w-[200px] md:max-w-[280px]">
+                        Direction : <span className="font-extrabold text-amber-500 uppercase tracking-wide">{selectedBus.trip_headsign || "Sans voyageurs"}</span>
                       </div>
                     </div>
                   </div>
@@ -1246,55 +1265,26 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                   {/* Close button */}
                   <button
                     onClick={() => setSelectedBusId(null)}
-                    className="w-8 h-8 md:w-10 md:h-10 flex items-center justify-center rounded-full bg-slate-800/80 hover:bg-slate-700/80 text-slate-400 hover:text-white transition-all border border-white/5 shadow-md active:scale-95"
+                    className="w-8 h-8 md:w-10 md:h-10 flex items-center justify-center rounded-full bg-slate-800/80 hover:bg-slate-700/80 text-slate-400 hover:text-white transition-all border border-white/5 active:scale-95 shrink-0"
                   >
                     <X size={15} className="md:w-[18px] md:h-[18px]" />
                   </button>
                 </div>
 
-                {/* Second Row: Real-time stop status */}
+                {/* Second Row: Real-time stop status (Very compact banner!) */}
                 {currentStopInfo?.name && (
                   <div className="w-full">
-                    <span className={`inline-flex w-full items-center gap-1.5 px-2.5 py-1 rounded-lg md:rounded-xl text-[8px] md:text-[9px] font-black uppercase tracking-widest border ${
+                    <span className={`inline-flex w-full items-center gap-1.5 px-2 py-0.5 rounded-md border text-[8px] md:text-[9px] font-black uppercase tracking-widest ${
                       currentStopInfo.status === 1 
                         ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" 
                         : "bg-cyan-500/10 border-cyan-500/20 text-cyan-400"
                     }`}>
-                      <span className="relative flex h-1.5 w-1.5">
+                      <span className="relative flex h-1 w-1">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-current opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-current"></span>
+                        <span className="relative inline-flex rounded-full h-1 w-1 bg-current"></span>
                       </span>
                       {currentStopInfo.status === 1 ? "À l'arrêt" : "En approche de"} : {currentStopInfo.name}
                     </span>
-                  </div>
-                )}
-
-                {/* Third Row: Destination Info */}
-                <div className="flex items-center gap-2 bg-slate-950/60 border border-white/5 rounded-lg md:rounded-xl px-2.5 py-1 md:py-1.5">
-                  <span className="text-[7.5px] md:text-[8px] font-black text-slate-500 uppercase tracking-widest shrink-0">
-                    DIRECTION
-                  </span>
-                  <span className="text-xs font-bold text-amber-500 font-mono uppercase tracking-wide truncate">
-                    {selectedBus.trip_headsign || "SANS VOYAGEURS"}
-                  </span>
-                </div>
-              </div>
-
-              {/* Compact Delay / Status Pill */}
-              <div className="flex gap-2 shrink-0">
-                {departureStatus ? (
-                  <div className="flex-1 flex items-center justify-center gap-1.5 py-1 rounded-lg border bg-amber-500/10 border-amber-500/20 text-amber-400 text-[10px] font-extrabold uppercase tracking-wide">
-                    <Clock size={12} className="animate-pulse" />
-                    <span>Attente Terminus • Départ {departureStatus.minutes} min</span>
-                  </div>
-                ) : (
-                  <div className={`flex-1 flex items-center justify-center gap-1.5 py-1 rounded-lg border text-[10px] font-extrabold uppercase tracking-wide ${
-                    (selectedBus.delay || 0) > 60
-                      ? "bg-orange-500/10 border-orange-500/20 text-orange-400"
-                      : "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                  }`}>
-                    <Clock size={12} />
-                    <span>{(selectedBus.delay || 0) > 60 ? `Retard : +${Math.round((selectedBus.delay || 0) / 60)} min` : "Service à l'heure"}</span>
                   </div>
                 )}
               </div>
