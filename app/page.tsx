@@ -96,15 +96,15 @@ export default function Home() {
   ];
 
   return (
-    <div className="relative min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center overflow-hidden px-6">
+    <div className="relative min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center pt-16 pb-16 px-6">
       
       {/* Subtle ambient glow */}
       <div className="absolute top-[-120px] left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-amber-500/8 blur-[160px] rounded-full pointer-events-none" />
 
-      <div className="relative z-10 w-full max-w-sm flex flex-col items-center">
+      <div className="relative z-10 w-full max-w-sm flex flex-col items-center pt-4">
 
         {/* Logo / Brand */}
-        <div className="mb-10 text-center">
+        <div className="mb-10 text-center mt-4">
           <h1 className="text-4xl font-black tracking-tight">
             <span className="bg-gradient-to-r from-amber-400 to-amber-600 text-transparent bg-clip-text">
               AXO
@@ -269,7 +269,7 @@ export default function Home() {
         </div>
 
         {/* Live status footer */}
-        <div className="flex flex-col items-center gap-2 mt-6">
+        <div className="flex flex-col items-center gap-2 mt-10 mb-10 pb-6">
           <span className="text-[10px] font-semibold text-slate-600">
             Données en temps réel • Oise Mobilité
           </span>
