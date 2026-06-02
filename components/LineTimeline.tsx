@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { AlertCircle, Clock, Navigation, Bus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { AlertCircle, Clock, Navigation, Bus, Map } from "lucide-react";
 
 // Clean and format bus names (remove RCR prefix)
 const formatBusName = (vehicleId: string) => {
@@ -39,6 +40,7 @@ interface LineTimelineProps {
 }
 
 export default function LineTimeline({ stops, vehicles, lineColor = "#34d399" }: LineTimelineProps) {
+  const router = useRouter();
   // Associate vehicles with stops
   const stopsWithVehicles = useMemo(() => {
     return stops.map(stop => {
@@ -187,13 +189,27 @@ export default function LineTimeline({ stops, vehicles, lineColor = "#34d399" }:
                             </span>
                           </div>
 
-                          {/* Row 2: Direction info */}
-                          {v.trip_headsign && v.trip_headsign !== "Inconnue" && (
-                            <div className="flex items-center gap-1 text-[10px] text-slate-400 font-semibold border-t border-white/5 pt-1.5 mt-0.5">
-                              <Navigation size={10} className="rotate-90 text-slate-500" />
-                              <span className="truncate">Direction: {v.trip_headsign}</span>
-                            </div>
-                          )}
+                          {/* Row 2: Direction info & Voir sur la carte button */}
+                          <div className="flex items-center justify-between gap-3 border-t border-white/5 pt-2 mt-1">
+                            {v.trip_headsign && v.trip_headsign !== "Inconnue" ? (
+                              <div className="flex items-center gap-1 text-[10px] text-slate-400 font-semibold truncate flex-1 min-w-0 pr-1">
+                                <Navigation size={10} className="rotate-90 text-slate-500 shrink-0" />
+                                <span className="truncate">Direction: {v.trip_headsign}</span>
+                              </div>
+                            ) : (
+                              <div className="flex-1" />
+                            )}
+                            
+                            <button
+                              onClick={() => {
+                                router.push(`/map?bus=${v.id}`);
+                              }}
+                              className="shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-500/10 hover:bg-amber-500 border border-amber-500/20 hover:border-amber-400 text-amber-400 hover:text-slate-950 font-bold text-[9px] uppercase tracking-wider transition-all duration-200 active:scale-95 hover:scale-105 shadow-sm"
+                            >
+                              <Map size={10} />
+                              Voir sur la carte
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>

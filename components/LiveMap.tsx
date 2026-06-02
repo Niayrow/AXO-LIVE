@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useMemo, Fragment } from "react";
+import { useState, useEffect, useMemo, Fragment, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Tooltip, Polyline, useMapEvents, useMap } from "react-leaflet";
 import { useQuery } from "@tanstack/react-query";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { Clock, Info, X, MapPin, Bus, SlidersHorizontal, ChevronDown, Search } from "lucide-react";
+import { Clock, Info, X, MapPin, Bus, SlidersHorizontal, ChevronDown, Search, Locate, AlertCircle, Edit3 } from "lucide-react";
 import { LINE_COLORS, getLineColor } from "./lineColors";
 
 // Fix Leaflet's default icon paths in Next.js
@@ -183,11 +183,94 @@ const createBusIcon = (
 
 // Custom DivIcon for bus STOPS — Rounded SQUARE shape with multi-color border
 // Distinct from circular bus markers: square shape + white dot center
-const createStopIcon = (isSelected: boolean = false, lines: string[] = []) => {
-  const size = isSelected ? 24 : 18;
-  const borderWidth = isSelected ? 3.5 : 3;
-  const innerSize = size - borderWidth * 2;
-  const radius = isSelected ? 7 : 5; // rounded-square corners
+// Highly adaptive: dynamically scales size, border, radius and opacity based on active selections and zoom levels
+const createStopIcon = (
+  isSelected: boolean = false,
+  lines: string[] = [],
+  zoomLevel: number = 13,
+  activeLineId: string | null = null,
+  stopName: string = ""
+) => {
+  // Sizing and opacity logic based on zoom level and selection states
+  const isStopOnActiveLine = activeLineId ? lines.includes(activeLineId) : false;
+  const isMajorStop = lines.length >= 3 || /Gare|Mairie|Lycée|Collège/i.test(stopName);
+
+  let size = 14;
+  let opacity = 1;
+
+  if (isSelected) {
+    size = 24;
+    opacity = 1;
+  } else if (activeLineId) {
+    if (isStopOnActiveLine) {
+      if (zoomLevel >= 18) {
+        size = 22;
+      } else if (zoomLevel >= 16) {
+        size = 18;
+      } else if (zoomLevel >= 14) {
+        size = 12;
+      } else {
+        size = 8;
+      }
+      opacity = 1;
+    } else {
+      if (zoomLevel >= 18) {
+        size = 10;
+        opacity = 0.35;
+      } else if (zoomLevel >= 16) {
+        size = 8;
+        opacity = 0.3;
+      } else if (zoomLevel >= 14) {
+        size = 5;
+        opacity = 0.15;
+      } else {
+        size = 0;
+        opacity = 0;
+      }
+    }
+  } else {
+    // Global view
+    if (isMajorStop) {
+      if (zoomLevel >= 18) {
+        size = 22;
+      } else if (zoomLevel >= 16) {
+        size = 18;
+      } else if (zoomLevel >= 14) {
+        size = 12;
+      } else {
+        size = 8;
+      }
+      opacity = 0.9;
+    } else {
+      if (zoomLevel >= 18) {
+        size = 18;
+        opacity = 0.85;
+      } else if (zoomLevel >= 16) {
+        size = 14;
+        opacity = 0.75;
+      } else if (zoomLevel >= 14) {
+        size = 6;
+        opacity = 0.35;
+      } else {
+        size = 0;
+        opacity = 0;
+      }
+    }
+  }
+
+  // If size is 0 or opacity is 0, we can return an invisible tiny placeholder icon
+  if (size <= 0 || opacity <= 0) {
+    return L.divIcon({
+      html: '<div style="display: none;"></div>',
+      className: 'custom-stop-marker-hidden',
+      iconSize: [0, 0],
+      iconAnchor: [0, 0],
+    });
+  }
+
+  const borderWidth = isSelected ? 3.5 : Math.max(1.5, size * 0.16);
+  const innerSize = Math.max(2, size - borderWidth * 2);
+  const radius = isSelected ? 7 : Math.max(2, size * 0.28); // rounded-square corners
 
   // Build conic-gradient from each line's color
   const colors = lines.length > 0
@@ -209,10 +292,10 @@ const createStopIcon = (isSelected: boolean = false, lines: string[] = []) => {
   const selectedOutline = isSelected ? 'outline: 2px solid #f59e0b; outline-offset: 2px;' : '';
   const shadow = isSelected
     ? '0 0 14px rgba(245,158,11,0.5), 0 2px 8px rgba(0,0,0,0.5)'
-    : '0 1px 5px rgba(0,0,0,0.45)';
+    : `0 1px 5px rgba(0,0,0,0.45)`;
 
   const dotColor = isSelected ? '#f59e0b' : '#ffffff';
-  const dotSize = isSelected ? 6 : 4;
+  const dotSize = isSelected ? 6 : Math.max(1.5, size * 0.22);
 
   const html = `
     <div style="
@@ -225,14 +308,15 @@ const createStopIcon = (isSelected: boolean = false, lines: string[] = []) => {
       justify-content: center;
       box-shadow: ${shadow};
       ${selectedOutline}
+      opacity: ${opacity};
       cursor: pointer;
-      transition: all 0.2s ease;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     ">
       <div style="
         width: ${innerSize}px;
         height: ${innerSize}px;
         background: #0f172a;
-        border-radius: ${Math.max(1, radius - 2)}px;
+        border-radius: ${Math.max(1, radius - 1.5)}px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -336,6 +420,38 @@ const getFuzzyMatchScore = (stopName: string, query: string): number => {
   return totalScore / queryWords.length;
 };
 
+// Distance calculation using Haversine formula (meters)
+const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const R = 6371e3; // meters
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c; // meters
+};
+
+// Custom User Marker Icon (Blue pulsing dot)
+const createUserIcon = () => {
+  if (typeof window === "undefined") return null as any;
+  return L.divIcon({
+    html: `
+      <div class="relative flex items-center justify-center w-6 h-6">
+        <div class="absolute w-5 h-5 bg-sky-500/30 rounded-full animate-ping"></div>
+        <div class="absolute w-3.5 h-3.5 bg-sky-500 border-2 border-white rounded-full shadow-lg"></div>
+      </div>
+    `,
+    className: "custom-user-icon",
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  });
+};
+
 // Map Event Listener Component for Zoom and Background clicks
 function MapEventsListener({
   setZoom,
@@ -371,19 +487,19 @@ function MapFocusController({
     if (highlightedBus?.position?.lat && highlightedBus?.position?.lon) {
       map.flyTo(
         [highlightedBus.position.lat, highlightedBus.position.lon],
-        16,
+        18,
         { animate: true, duration: 1.2 }
       );
     } else if (selectedBus?.position?.lat && selectedBus?.position?.lon) {
       map.flyTo(
         [selectedBus.position.lat, selectedBus.position.lon],
-        16,
+        18,
         { animate: true, duration: 1.2 }
       );
     } else if (selectedStop?.stop_lat && selectedStop?.stop_lon) {
       map.flyTo(
         [selectedStop.stop_lat, selectedStop.stop_lon],
-        16,
+        18,
         { animate: true, duration: 1.2 }
       );
     }
@@ -408,12 +524,81 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isOthersOpen, setIsOthersOpen] = useState(false);
 
+  const [map, setMap] = useState<L.Map | null>(null);
+  const [userCoords, setUserCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
+  const [nearestStopBanner, setNearestStopBanner] = useState<string | null>(null);
+  const [gpsWarning, setGpsWarning] = useState<string | null>(null);
+  // Fetch real-time traffic alerts from OiseMob server
+  const { data: alertsData } = useQuery({
+    queryKey: ["networkAlerts"],
+    queryFn: async () => {
+      const res = await fetch("/api/axo/alerts");
+      if (!res.ok) throw new Error("Failed to fetch alerts");
+      return res.json();
+    },
+    refetchInterval: 120000, // every 2 minutes
+  });
+
+  // Combine active alerts into a single string for the scrolling marquee ticker
+  const scrollingAlertText = useMemo(() => {
+    if (!alertsData?.alerts || alertsData.alerts.length === 0) {
+      return "✅ Trafic normal sur l'ensemble du réseau AXO. Aucun incident signalé. Voyagez sereinement !";
+    }
+    return alertsData.alerts
+      .map((a: any) => {
+        const linesStr = a.impactedLines?.length > 0 ? ` [Ligne ${a.impactedLines.join(", ")}]` : "";
+        return `⚠️ ${a.title} : ${a.description}${linesStr}`;
+      })
+      .join("    |    ");
+  }, [alertsData]);
+
   // Derive exact generation time of the GTFS-RT feed from OiseMob server
   const lastUpdated = lastUpdatedTimestamp ? new Date(lastUpdatedTimestamp) : new Date();
 
   // Derive live data
   const selectedBus = vehicles.find(v => v.id === selectedBusId) || null;
   const highlightedBus = vehicles.find(v => v.id === highlightedBusId) || null;
+
+  // Measure direction text overflow for marquee effect (initialized after selectedBus derivation)
+  const directionRef = useRef<HTMLDivElement>(null);
+  const [scrollDistance, setScrollDistance] = useState(0);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (directionRef.current) {
+        const container = directionRef.current.parentElement;
+        if (container) {
+          const diff = directionRef.current.scrollWidth - container.clientWidth;
+          if (diff > 0) {
+            setScrollDistance(diff + 12); // safety padding
+          } else {
+            setScrollDistance(0);
+          }
+        }
+      } else {
+        setScrollDistance(0);
+      }
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [selectedBus?.trip_headsign, selectedBusId]);
+
+  // Check URL query parameters on mount to focus a specific bus (deep linking)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const busId = params.get("bus");
+      if (busId) {
+        setSelectedBusId(busId);
+        const bus = vehicles.find(v => v.id === busId);
+        if (bus?.route_id) {
+          setSelectedLineId(bus.route_id);
+        }
+        setIsInitialModalOpen(false);
+      }
+    }
+  }, [vehicles]);
 
   // Filter vehicles by the selected line or active bus's line
   const filteredVehicles = useMemo(() => {
@@ -473,6 +658,67 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
     staleTime: Infinity,
   });
 
+  const handleLocateUser = () => {
+    if (!navigator.geolocation) {
+      alert("La géolocalisation n'est pas supportée par votre navigateur.");
+      return;
+    }
+    
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setIsLocating(false);
+        const { latitude: lat, longitude: lon } = position.coords;
+        setUserCoords({ lat, lon });
+        
+        // Find nearest stop
+        if (allStopsData?.stops && allStopsData.stops.length > 0) {
+          let closestStop: any = null;
+          let minDistance = Infinity;
+          
+          allStopsData.stops.forEach((stop: any) => {
+            if (!stop.stop_lat || !stop.stop_lon) return;
+            const dist = getDistance(lat, lon, stop.stop_lat, stop.stop_lon);
+            if (dist < minDistance) {
+              minDistance = dist;
+              closestStop = stop;
+            }
+          });
+          
+          if (closestStop) {
+            // Check if too far (more than 20km)
+            if (minDistance > 20000) {
+              setGpsWarning("Position hors réseau AXO ou GPS imprécis (plus de 20 km)");
+              setTimeout(() => {
+                setGpsWarning(null);
+              }, 6000);
+              return;
+            }
+
+            if (map) {
+              map.flyTo([lat, lon], 17, { animate: true, duration: 1.5 });
+            }
+
+            setSelectedStopId(closestStop.stop_id);
+            setSelectedBusId(null);
+            
+            // Show a temporary banner with nearest stop
+            setNearestStopBanner(closestStop.stop_name);
+            setTimeout(() => {
+              setNearestStopBanner(null);
+            }, 6000);
+          }
+        }
+      },
+      (error) => {
+        setIsLocating(false);
+        console.error("Error getting location: ", error);
+        alert("Impossible d'obtenir votre position. Veuillez vérifier vos autorisations GPS.");
+      },
+      { enableHighAccuracy: true }
+    );
+  };
+
   const selectedStop = allStopsData?.stops?.find((s: any) => s.stop_id === selectedStopId) || null;
 
   // Fetch static line data to get the precise stop timeline for the selected trip or filtered line
@@ -503,29 +749,49 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
   });
 
   // Sort shapes so primary lines A, B, C1, C2, D are rendered last and sit on top of secondary shapes
+  // Also ensures the currently selected/active route is rendered absolute last (highest z-index on top!)
   const sortedShapes = useMemo(() => {
     if (!shapesData?.shapes) return [];
     const primaryList = ["A", "B", "C1", "C2", "D"];
+    const activeRouteId = selectedLineId || selectedBus?.route_id || highlightedBus?.route_id;
+
     return [...shapesData.shapes].sort((a: any, b: any) => {
+      if (activeRouteId) {
+        if (a.route_id === activeRouteId && b.route_id !== activeRouteId) return 1;
+        if (a.route_id !== activeRouteId && b.route_id === activeRouteId) return -1;
+      }
+      
       const aIsPrimary = primaryList.includes(a.route_id);
       const bIsPrimary = primaryList.includes(b.route_id);
       if (aIsPrimary && !bIsPrimary) return 1;
       if (!aIsPrimary && bIsPrimary) return -1;
       return 0;
     });
-  }, [shapesData]);
+  }, [shapesData, selectedLineId, selectedBus?.route_id, highlightedBus?.route_id]);
 
-  // Filter stops to show
+  // Filter stops to show dynamically based on selections and zoom breaks
+  // Intermediate ordinary stops are hidden at lower zooms to prevent spaghettis clutter, while major hubs stay visible!
   const stopsToShow = useMemo(() => {
     if (!showStops) return selectedStop ? [selectedStop] : [];
     
-    // Only show stops serving the selected line or the active bus's line!
     const activeRouteId = selectedLineId || selectedBus?.route_id || highlightedBus?.route_id;
-    if (activeRouteId && allStopsData?.stops) {
-      return allStopsData.stops.filter((s: any) => s.lines?.includes(activeRouteId));
+    let stops = allStopsData?.stops || [];
+    
+    if (activeRouteId) {
+      stops = stops.filter((s: any) => s.lines?.includes(activeRouteId));
+    } else {
+      // Global view (no active line filter)
+      // At zoom < 14: show only major terminus/stations to avoid visual clutter
+      if (zoomLevel < 14) {
+        stops = stops.filter((s: any) => 
+          s.stop_id === selectedStopId ||
+          (s.lines && s.lines.length >= 3) || 
+          /Gare|Mairie|Lycée|Collège/i.test(s.stop_name || "")
+        );
+      }
     }
-    return allStopsData?.stops || [];
-  }, [showStops, selectedStop, selectedBus, highlightedBus, selectedLineId, allStopsData]);
+    return stops;
+  }, [showStops, selectedStop, selectedBus, highlightedBus, selectedLineId, allStopsData, zoomLevel, selectedStopId]);
 
   // Filtered stops based on textual search query with fuzzy matching and accent insensitivity
   const filteredStops = useMemo(() => {
@@ -603,6 +869,47 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
 
   return (
     <div className="relative w-full h-[calc(100vh-80px)] overflow-hidden bg-slate-950">
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes marquee-scroll {
+          0% { transform: translate3d(0, 0, 0); }
+          15% { transform: translate3d(0, 0, 0); }
+          85% { transform: translate3d(var(--scroll-dist, 0px), 0, 0); }
+          100% { transform: translate3d(var(--scroll-dist, 0px), 0, 0); }
+        }
+        .animate-direction-marquee {
+          animation: marquee-scroll 8s ease-in-out infinite alternate;
+        }
+        @keyframes marquee-alert-scroll {
+          0% { transform: translate3d(100%, 0, 0); }
+          100% { transform: translate3d(-100%, 0, 0); }
+        }
+        .animate-marquee-alert {
+          display: inline-block;
+          white-space: nowrap;
+          animation: marquee-alert-scroll 32s linear infinite;
+        }
+        .animate-marquee-alert:hover {
+          animation-play-state: paused;
+        }
+      `}} />
+
+      {/* Top Floating Marquee Alert Banner */}
+      {scrollingAlertText && (
+        <div className="absolute top-0 md:top-4 left-0 md:left-1/2 md:-translate-x-1/2 z-[1000] w-full md:w-[60vw] max-w-3xl h-8 md:h-9 bg-slate-950/85 backdrop-blur-xl border-b md:border border-white/10 rounded-none md:rounded-full flex items-center px-4 shadow-[0_8px_32px_rgba(0,0,0,0.5)] overflow-hidden pointer-events-auto">
+          <div className="flex items-center gap-2 shrink-0 bg-slate-950/90 z-10 pr-2.5 border-r border-white/5 h-full">
+            <span className={`w-2 h-2 rounded-full ${(!alertsData?.alerts || alertsData.alerts.length === 0) ? "bg-emerald-500" : "bg-red-500 animate-ping"}`} />
+            <span className={`text-[10px] font-black uppercase tracking-widest ${(!alertsData?.alerts || alertsData.alerts.length === 0) ? "text-emerald-400" : "text-red-400"}`}>
+              {(!alertsData?.alerts || alertsData.alerts.length === 0) ? "Réseau" : "Alerte"}
+            </span>
+          </div>
+          
+          <div className="flex-1 overflow-hidden relative mx-3 h-full flex items-center">
+            <div className="animate-marquee-alert text-[11px] font-bold text-slate-300">
+              {scrollingAlertText}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Onboarding Modal asking which line to visualize */}
       {isInitialModalOpen && (
@@ -664,7 +971,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
       )}
 
       {/* Floating Real-time Update Indicator */}
-      <div className="absolute top-4 left-4 z-[1000] flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-slate-950/92 border border-white/10 backdrop-blur-3xl shadow-lg">
+      <div className="absolute top-11 md:top-4 left-4 z-[1000] flex items-center gap-2 px-3 py-1.5 md:py-2.5 rounded-xl md:rounded-2xl bg-slate-950/92 border border-white/10 backdrop-blur-3xl shadow-lg">
         <span className="relative flex h-2 w-2">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
           <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
@@ -675,8 +982,8 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
       </div>
 
       {/* Top Floating Line Filter Bar */}
-      <div className="absolute top-16 left-4 right-4 z-[1000] flex flex-col items-center pointer-events-none gap-2">
-        <div className="pointer-events-auto flex items-center gap-1.5 p-1.5 bg-slate-950/92 border border-white/10 backdrop-blur-3xl rounded-2xl shadow-2xl overflow-x-auto max-w-full no-scrollbar">
+      <div className="absolute top-24 md:top-16 left-4 right-4 z-[1000] flex flex-col items-center pointer-events-none gap-2">
+        <div className="pointer-events-auto flex items-center gap-1 p-1 bg-slate-950/92 border border-white/10 backdrop-blur-3xl rounded-2xl shadow-2xl overflow-x-auto max-w-full no-scrollbar">
           <button
             onClick={() => {
               setSelectedLineId(null);
@@ -684,13 +991,14 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
               setSelectedStopId(null);
               setIsOthersOpen(false);
             }}
-            className={`px-3.5 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 border ${
+            className={`w-8 h-8 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all duration-300 border flex items-center justify-center hover:scale-105 active:scale-95 ${
               !selectedLineId
                 ? "bg-amber-500 border-amber-400 text-slate-950 shadow-[0_0_10px_rgba(245,158,11,0.3)]"
                 : "bg-slate-950/65 border-white/5 text-slate-400 hover:text-white"
             }`}
+            title="Toutes les lignes"
           >
-            Toutes Lignes
+            ALL
           </button>
           
           {/* Primary network lines */}
@@ -706,16 +1014,16 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                   setSelectedStopId(null);
                   setIsOthersOpen(false);
                 }}
-                className="px-3.5 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 border flex items-center gap-1.5 shrink-0"
+                className="w-8 h-8 rounded-xl text-[10.5px] font-black uppercase transition-all duration-300 border flex items-center justify-center shrink-0 hover:scale-105 active:scale-95 hover:brightness-110"
                 style={{
                   backgroundColor: isActive ? `${lineColor}33` : "rgba(2, 6, 23, 0.65)",
                   borderColor: isActive ? lineColor : "rgba(255, 255, 255, 0.05)",
                   color: isActive ? "#ffffff" : lineColor,
                   boxShadow: isActive ? `0 0 10px ${lineColor}40` : "none",
                 }}
+                title={`Ligne ${line}`}
               >
-                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: lineColor }} />
-                Ligne {line}
+                {line}
               </button>
             );
           })}
@@ -728,30 +1036,31 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                 setSelectedBusId(null);
                 setSelectedStopId(null);
               }}
-              className="px-3.5 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 border flex items-center gap-1.5 shrink-0 animate-in zoom-in duration-300"
+              className="px-2.5 h-8 rounded-xl text-[10.5px] font-black uppercase transition-all duration-300 border flex items-center gap-1 shrink-0 animate-in zoom-in duration-300 hover:scale-105 active:scale-95"
               style={{
                 backgroundColor: `${LINE_COLORS[selectedLineId]}33`,
                 borderColor: LINE_COLORS[selectedLineId],
                 color: "#ffffff",
                 boxShadow: `0 0 10px ${LINE_COLORS[selectedLineId]}40`,
               }}
+              title={`Ligne ${selectedLineId}`}
             >
-              Ligne {selectedLineId}
-              <X size={12} className="text-white/60 hover:text-white shrink-0 ml-0.5" />
+              {selectedLineId}
+              <X size={10} className="text-white/60 hover:text-white shrink-0 ml-0.5" />
             </button>
           )}
 
           {/* + Autres sub-menu button toggle */}
           <button
             onClick={() => setIsOthersOpen(!isOthersOpen)}
-            className={`px-3.5 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 border flex items-center gap-1 shrink-0 ${
+            className={`w-8 h-8 rounded-xl text-[11px] font-black uppercase transition-all duration-300 border flex items-center justify-center shrink-0 hover:scale-105 active:scale-95 ${
               isOthersOpen
                 ? "bg-amber-500 border-amber-400 text-slate-950 shadow-[0_0_10px_rgba(245,158,11,0.3)]"
                 : "bg-slate-950/65 border-white/5 text-slate-400 hover:text-white"
             }`}
+            title="Autres lignes"
           >
-            <span>+ Autres</span>
-            <ChevronDown size={11} className={`transition-transform duration-300 shrink-0 ${isOthersOpen ? "rotate-180" : ""}`} />
+            +
           </button>
         </div>
 
@@ -804,7 +1113,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
       </div>
 
       {/* Floating Filter Controls & Search Bar */}
-      <div className="absolute top-4 right-4 z-[1000] flex flex-col items-end gap-1.5">
+      <div className="absolute top-11 md:top-4 right-4 z-[1000] flex flex-col items-end gap-1.5">
         <div className="flex items-center gap-2 pointer-events-auto">
           {/* Text Search Panel */}
           {isSearchOpen && (
@@ -829,13 +1138,31 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
             </div>
           )}
 
+          {/* Geolocation Button */}
+          <button
+            onClick={handleLocateUser}
+            disabled={isLocating}
+            className={`flex items-center justify-center w-10 h-10 rounded-2xl border shadow-lg backdrop-blur-3xl transition-all duration-300 hover:scale-105 active:scale-95 ${
+              userCoords
+                ? "bg-sky-500 border-sky-400 text-slate-950 shadow-[0_0_15px_rgba(14,165,233,0.4)]"
+                : "bg-slate-950/92 border-white/10 text-slate-200 hover:bg-slate-900/90 hover:border-white/20"
+            }`}
+            title="Me géolocaliser et suggérer un arrêt"
+          >
+            {isLocating ? (
+              <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Locate size={15} className={userCoords ? "animate-pulse" : ""} />
+            )}
+          </button>
+
           {/* Search Toggle Button */}
           <button
             onClick={() => {
               setIsSearchOpen(!isSearchOpen);
               if (isSearchOpen) setSearchQuery("");
             }}
-            className={`flex items-center justify-center w-10 h-10 rounded-2xl border shadow-lg backdrop-blur-3xl transition-all duration-300 ${isSearchOpen
+            className={`flex items-center justify-center w-10 h-10 rounded-2xl border shadow-lg backdrop-blur-3xl transition-all duration-300 hover:scale-105 active:scale-95 ${isSearchOpen
                 ? "bg-cyan-500 border-cyan-400 text-slate-950 shadow-[0_0_15px_rgba(34,211,238,0.4)]"
                 : "bg-slate-950/92 border-white/10 text-slate-200 hover:bg-slate-900/90 hover:border-white/20"
               }`}
@@ -857,38 +1184,126 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
           </button>
         </div>
 
-        {/* Search Results Dropdown */}
-        {isSearchOpen && searchQuery.trim().length > 0 && (
-          <div className="pointer-events-auto bg-slate-950/95 border border-white/10 p-3 rounded-[20px] w-64 md:w-80 shadow-2xl flex flex-col gap-1 max-h-56 overflow-y-auto no-scrollbar animate-in fade-in slide-in-from-top-2 duration-200 mt-1">
-            {filteredStops.length === 0 ? (
-              <div className="text-[10px] text-slate-500 text-center py-4 font-black uppercase tracking-wider">
-                Aucun arrêt trouvé
-              </div>
+        {/* Search & Suggestions Results Dropdown */}
+        {isSearchOpen && (
+          <div className="pointer-events-auto bg-slate-950/95 border border-white/10 p-3 rounded-[20px] w-64 md:w-80 shadow-2xl flex flex-col gap-1 max-h-72 overflow-y-auto no-scrollbar animate-in fade-in slide-in-from-top-2 duration-200 mt-1">
+            {searchQuery.trim().length > 0 ? (
+              filteredStops.length === 0 ? (
+                <div className="text-[10px] text-slate-500 text-center py-4 font-black uppercase tracking-wider">
+                  Aucun arrêt trouvé
+                </div>
+              ) : (
+                filteredStops.map((stop: any) => (
+                  <button
+                    key={stop.stop_id}
+                    onClick={() => {
+                      setSelectedStopId(stop.stop_id);
+                      setSelectedBusId(null);
+                      setSearchQuery("");
+                      setIsSearchOpen(false); // Auto close
+                    }}
+                    className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-white/5 active:bg-white/10 text-left transition-all duration-200"
+                  >
+                    <div className="flex flex-col gap-0.5 min-w-0 pr-2">
+                      <span className="text-xs font-bold text-slate-200 truncate font-mono uppercase tracking-wide">
+                        {stop.stop_name}
+                      </span>
+                      <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">
+                        {stop.lines?.length > 0 ? `Lignes : ${stop.lines.join(", ")}` : "Aucune ligne"}
+                      </span>
+                    </div>
+                    <div className="shrink-0 flex items-center justify-center w-6 h-6 rounded-lg bg-slate-800 text-cyan-400 border border-slate-700">
+                      <MapPin size={12} />
+                    </div>
+                  </button>
+                ))
+              )
             ) : (
-              filteredStops.map((stop: any) => (
-                <button
-                  key={stop.stop_id}
-                  onClick={() => {
-                    setSelectedStopId(stop.stop_id);
-                    setSelectedBusId(null);
-                    setSearchQuery("");
-                    setIsSearchOpen(false); // Auto close
-                  }}
-                  className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-white/5 active:bg-white/10 text-left transition-all duration-200"
-                >
-                  <div className="flex flex-col gap-0.5 min-w-0 pr-2">
-                    <span className="text-xs font-bold text-slate-200 truncate font-mono uppercase tracking-wide">
-                      {stop.stop_name}
-                    </span>
-                    <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">
-                      {stop.lines?.length > 0 ? `Lignes : ${stop.lines.join(", ")}` : "Aucune ligne"}
-                    </span>
-                  </div>
-                  <div className="shrink-0 flex items-center justify-center w-6 h-6 rounded-lg bg-slate-800 text-cyan-400 border border-slate-700">
-                    <MapPin size={12} />
-                  </div>
-                </button>
-              ))
+              /* Geolocation / Nearby stops suggestion */
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-1.5 px-2 py-1 border-b border-white/5 pb-2">
+                  <MapPin size={11} className="text-cyan-400 animate-pulse" />
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    À proximité de vous
+                  </span>
+                </div>
+                
+                {!userCoords ? (
+                  <button
+                    onClick={handleLocateUser}
+                    className="w-full flex items-center justify-center gap-2 p-3.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500 hover:text-slate-950 border border-cyan-500/20 text-cyan-400 font-bold text-xs uppercase tracking-wider transition-all duration-200 hover:scale-102 active:scale-98"
+                  >
+                    {isLocating ? (
+                      <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <MapPin size={12} />
+                    )}
+                    Activer la position GPS
+                  </button>
+                ) : (
+                  allStopsData?.stops ? (
+                    (() => {
+                      const nearbyWithDistance = allStopsData.stops.map((stop: any) => ({
+                        ...stop,
+                        distance: getDistance(userCoords.lat, userCoords.lon, stop.stop_lat, stop.stop_lon)
+                      }));
+                      
+                      const closestStop = [...nearbyWithDistance].sort((a, b) => a.distance - b.distance)[0];
+                      
+                      if (closestStop && closestStop.distance > 20000) {
+                        return (
+                          <div className="p-3 text-center bg-red-500/10 border border-red-500/20 rounded-xl animate-in fade-in duration-200">
+                            <span className="text-[10px] font-black text-red-400 uppercase tracking-widest block">
+                              Position hors réseau AXO
+                            </span>
+                            <span className="text-[9px] text-slate-500 font-bold mt-1 block normal-case">
+                              Votre GPS indique que vous êtes à plus de 20 km du réseau.
+                            </span>
+                          </div>
+                        );
+                      }
+                      
+                      const nearby = [...nearbyWithDistance]
+                        .sort((a, b) => a.distance - b.distance)
+                        .slice(0, 3);
+                      
+                      return nearby.map((stop: any) => (
+                        <button
+                          key={stop.stop_id}
+                          onClick={() => {
+                            setSelectedStopId(stop.stop_id);
+                            setSelectedBusId(null);
+                            setIsSearchOpen(false);
+                          }}
+                          className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-white/5 active:bg-white/10 text-left transition-all duration-200"
+                        >
+                          <div className="flex flex-col gap-0.5 min-w-0 pr-2">
+                            <span className="text-xs font-bold text-slate-200 truncate font-mono uppercase tracking-wide">
+                              {stop.stop_name}
+                            </span>
+                            <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                              <span>Lignes : {stop.lines?.join(", ") || "Aucune"}</span>
+                              <span className="w-1 h-1 rounded-full bg-slate-700" />
+                              <span className="text-cyan-400 font-bold font-sans">
+                                {stop.distance < 1000 
+                                  ? `${Math.round(stop.distance)}m` 
+                                  : `${(stop.distance / 1000).toFixed(1)}km`}
+                              </span>
+                            </span>
+                          </div>
+                          <div className="shrink-0 flex items-center justify-center w-6 h-6 rounded-lg bg-slate-800 text-cyan-400 border border-slate-700">
+                            <MapPin size={12} />
+                          </div>
+                        </button>
+                      ));
+                    })()
+                  ) : (
+                    <div className="text-[10px] text-slate-500 text-center py-2">
+                      Calcul des distances...
+                    </div>
+                  )
+                )}
+              </div>
             )}
           </div>
         )}
@@ -966,20 +1381,21 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
 
         /* Ultra-modern glassmorphic, compact stop label */
         .stop-label-pill {
-          background: rgba(15, 23, 42, 0.8) !important;
-          backdrop-filter: blur(4px) !important;
-          border: 1px solid rgba(255, 255, 255, 0.12) !important;
-          border-radius: 6px !important;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
+          background: rgba(15, 23, 42, 0.85) !important;
+          backdrop-filter: blur(6px) !important;
+          border: 1.2px solid rgba(255, 255, 255, 0.15) !important;
+          border-radius: 8px !important;
+          box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6) !important;
           color: #cbd5e1 !important;
-          font-size: 8px !important;
+          font-size: 10.5px !important;
           font-weight: 700 !important;
           font-family: system-ui, -apple-system, sans-serif !important;
           letter-spacing: 0.02em !important;
-          padding: 2px 6.5px !important;
+          padding: 3px 7.5px !important;
           white-space: nowrap !important;
-          pointer-events: none !important;
-          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          pointer-events: auto !important;
+          cursor: pointer !important;
+          transition: opacity 0.2s ease-in-out, background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out, box-shadow 0.2s ease-in-out !important;
         }
         .stop-label-pill::before {
           display: none !important;
@@ -987,13 +1403,13 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
 
         /* Selected stop label: vibrant golden accent, neon border glow */
         .stop-label-selected {
-          background: rgba(245, 158, 11, 0.15) !important;
-          border: 1px solid #f59e0b !important;
+          background: rgba(245, 158, 11, 0.2) !important;
+          border: 1.5px solid #f59e0b !important;
           color: #f59e0b !important;
-          font-size: 8.5px !important;
-          padding: 2.5px 8px !important;
-          box-shadow: 0 0 10px rgba(245, 158, 11, 0.3), 0 4px 14px rgba(0, 0, 0, 0.6) !important;
-          font-weight: 800 !important;
+          font-size: 12px !important;
+          padding: 4px 10px !important;
+          box-shadow: 0 0 12px rgba(245, 158, 11, 0.4), 0 4px 16px rgba(0, 0, 0, 0.7) !important;
+          font-weight: 850 !important;
         }
 
         /* Legacy transparent halo labels (used when zoomed out and many labels visible) */
@@ -1015,7 +1431,8 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
             -1.5px  1.5px 0 #020617,
              1.5px  1.5px 0 #020617,
              0px 4px 10px rgba(0,0,0,0.9) !important;
-          pointer-events: none !important;
+          pointer-events: auto !important;
+          cursor: pointer !important;
           transition: color 0.2s ease-in-out;
         }
         .stop-tooltip-clean::before {
@@ -1032,6 +1449,11 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
         .leaflet-tooltip-pane {
           z-index: 600 !important;
         }
+
+        /* Prevent white background flash when zooming or panning map tiles */
+        .leaflet-container {
+          background-color: #090909 !important;
+        }
       `}} />
 
       {/* Map layer */}
@@ -1042,6 +1464,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
           className="w-full h-full"
           zoomControl={false}
           attributionControl={false}
+          ref={setMap}
         >
           <MapEventsListener
             setZoom={setZoomLevel}
@@ -1064,6 +1487,15 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
             attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
           />
 
+          {/* User Location Pulse Marker */}
+          {userCoords && (
+            <Marker
+              position={[userCoords.lat, userCoords.lon]}
+              icon={createUserIcon()}
+              zIndexOffset={1000}
+            />
+          )}
+
           {/* Network Polylines (Shapes) */}
           {showShapes && sortedShapes?.map((shape: any) => {
             // Determine if this line should be highlighted
@@ -1071,14 +1503,31 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
             const hasActiveFilter = !!activeRouteId;
             const isLineSelected = activeRouteId === shape.route_id;
 
-            // If a filter is set, completely hide other shapes
-            if (hasActiveFilter && !isLineSelected) return null;
-
             const isPrimary = ["A", "B", "C1", "C2", "D"].includes(shape.route_id);
 
-            // Priority styling: Primary lines (A-D) are bolder and brighter; secondary lines (E, F, EXAL, S-series) are softer background elements
-            const opacity = hasActiveFilter ? 1 : isPrimary ? 0.75 : 0.35;
-            const weight = hasActiveFilter ? 6 : isPrimary ? 4.5 : 2.5;
+            // Dynamic opacity and weight styling based on active filter and line priority
+            let opacity = 0.35;
+            let weight = 2.5;
+
+            if (hasActiveFilter) {
+              if (isLineSelected) {
+                opacity = 1.0;
+                weight = 6;
+              } else {
+                // Secondary background network when focusing a line
+                opacity = 0.08;
+                weight = 1.5;
+              }
+            } else {
+              // Rule 1: Initial state - subtle ambient network lines to avoid spaghetti clutter
+              if (isPrimary) {
+                opacity = 0.30;
+                weight = 3.5;
+              } else {
+                opacity = 0.15;
+                weight = 2;
+              }
+            }
 
             return (
               <Polyline
@@ -1137,7 +1586,13 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                 )}
                 <Marker
                   position={displayPosition}
-                  icon={createStopIcon(isSelected, stopLines)}
+                  icon={createStopIcon(
+                    isSelected, 
+                    stopLines, 
+                    zoomLevel, 
+                    selectedLineId || selectedBus?.route_id || highlightedBus?.route_id,
+                    stop.stop_name || ""
+                  )}
                   interactive={true}
                   zIndexOffset={isSelected ? 100 : 10}
                   eventHandlers={{
@@ -1148,14 +1603,21 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                     }
                   }}
                 >
-                  {(zoomLevel >= 15 || isSelected) && (
+                  {(zoomLevel >= 18 || isSelected) && (
                     <Tooltip
                        direction="right"
                        offset={[12, 0]}
                        opacity={1}
                        permanent
-                       interactive={false}
+                       interactive={true}
                        className={`stop-label-pill ${isSelected ? "stop-label-selected" : ""}`}
+                       eventHandlers={{
+                         click: (e) => {
+                           L.DomEvent.stopPropagation(e);
+                           setSelectedStopId(stop.stop_id);
+                           setSelectedBusId(null);
+                         }
+                       }}
                     >
                       {stop.stop_name}
                     </Tooltip>
@@ -1211,8 +1673,8 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
             <>
               {/* Airy & Premium Header Row */}
               <div className="flex flex-col gap-1.5 md:gap-2 shrink-0 pb-1.5 md:pb-2.5 border-b border-white/5">
-                <div className="flex justify-between items-center w-full">
-                  <div className="flex items-center gap-2 md:gap-3">
+                <div className="flex justify-between items-center w-full gap-3">
+                  <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
                     {/* Route Badge */}
                     <div
                       className="w-9 h-9 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center font-black text-sm md:text-lg border shadow-lg shrink-0"
@@ -1227,8 +1689,8 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                     </div>
                     
                     {/* Bus Name, Delay & Type */}
-                    <div className="flex flex-col gap-0.5 min-w-0">
-                      <div className="flex items-center gap-1.5">
+                    <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <h3 className="text-sm md:text-lg font-black text-white tracking-wide leading-tight">
                           Bus {formatBusName(selectedBus.vehicle_id || "Inconnu")}
                         </h3>
@@ -1255,9 +1717,25 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                         </span>
                       </div>
                       
-                      {/* Direction Row (Directly nested under title to save space!) */}
-                      <div className="text-[10px] md:text-xs font-semibold text-slate-400 truncate max-w-[200px] md:max-w-[280px]">
-                        Direction : <span className="font-extrabold text-amber-500 uppercase tracking-wide">{selectedBus.trip_headsign || "Sans voyageurs"}</span>
+                      {/* Direction Row with Scrolling Marquee on Overflow */}
+                      <div className="text-[10px] md:text-xs font-semibold text-slate-400 w-full overflow-hidden flex items-center gap-1">
+                        <span className="shrink-0">Direction :</span>
+                        <div className="relative overflow-hidden flex-1 h-[14px] md:h-[16px]">
+                          <div 
+                            ref={directionRef}
+                            className={`absolute left-0 top-0 whitespace-nowrap transition-transform ${
+                              scrollDistance > 0 ? "animate-direction-marquee" : ""
+                            }`}
+                            style={{ 
+                              transform: scrollDistance > 0 ? undefined : "none",
+                              "--scroll-dist": `-${scrollDistance}px`
+                            } as React.CSSProperties}
+                          >
+                            <span className="font-extrabold text-amber-500 uppercase tracking-wide">
+                              {selectedBus.trip_headsign || "Sans voyageurs"}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1457,6 +1935,26 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                         <span className="w-1 h-1 rounded-full bg-cyan-400 drop-shadow-[0_0_4px_rgba(34,211,238,0.85)]" />
                       </div>
                     </div>
+
+                    {/* Line Badges directly under the black LED panel */}
+                    <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                      {(selectedStop.lines || []).map((l: string) => {
+                        const lineColor = getLineColor(l);
+                        return (
+                          <span 
+                            key={l}
+                            className="px-2.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider border shrink-0"
+                            style={{
+                              color: lineColor,
+                              borderColor: `${lineColor}40`,
+                              backgroundColor: `${lineColor}15`
+                            }}
+                          >
+                            Ligne {l}
+                          </span>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
                 <button
@@ -1555,8 +2053,32 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
             </>
           )}
 
-        </div>
+        {/* Nearest Stop Notification Banner */}
+        {nearestStopBanner && (
+          <div className="absolute top-24 left-4 right-4 z-[1001] flex justify-center pointer-events-none">
+            <div className="bg-cyan-500 border border-cyan-400 text-slate-950 px-4 py-2.5 rounded-2xl shadow-[0_10px_25px_rgba(34,211,238,0.4)] flex items-center gap-2 animate-in slide-in-from-top-3 duration-300 pointer-events-auto">
+              <MapPin size={14} className="animate-bounce shrink-0" />
+              <span className="text-xs font-black uppercase tracking-wider">
+                Arrêt suggéré : {nearestStopBanner}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* GPS Warning Notification Banner */}
+        {gpsWarning && (
+          <div className="absolute top-24 left-4 right-4 z-[1001] flex justify-center pointer-events-none">
+            <div className="bg-red-500 border border-red-400 text-white px-4 py-2.5 rounded-2xl shadow-[0_10px_25px_rgba(239,68,68,0.4)] flex items-center gap-2 animate-in slide-in-from-top-3 duration-300 pointer-events-auto">
+              <AlertCircle size={14} className="animate-pulse shrink-0 text-white" />
+              <span className="text-xs font-black uppercase tracking-wider">
+                {gpsWarning}
+              </span>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
-  );
+  </div>
+);
 }

@@ -17,7 +17,7 @@ export default function BottomNav() {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 h-20 backdrop-blur-3xl bg-slate-950/60 border-t border-white/[0.08] z-50 px-4 pb-safe flex justify-between items-center shadow-[0_-20px_40px_rgba(0,0,0,0.4)]">
+    <nav className="fixed bottom-0 left-0 right-0 h-20 backdrop-blur-xl bg-black/20 border-t border-white/10 z-50 px-4 pb-safe flex justify-between items-center shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
       {navItems.map((item) => {
         const isActive = pathname === item.href;
         const Icon = item.icon;
@@ -27,13 +27,13 @@ export default function BottomNav() {
             <div key={item.href} className="relative flex justify-center w-full h-full -mt-6">
               <Link 
                 href={item.href}
-                className={`flex items-center justify-center w-14 h-14 rounded-full border transition-all duration-300 active:scale-95 shadow-lg backdrop-blur-md ${
+                className={`flex items-center justify-center w-14 h-14 rounded-full border transition-all duration-300 hover:scale-105 active:scale-90 shadow-lg backdrop-blur-md ${
                   isActive 
-                    ? "bg-amber-500 border-amber-400 text-slate-950 shadow-[0_0_20px_rgba(245,158,11,0.4)]" 
-                    : "bg-slate-950/75 border-white/10 text-amber-500 hover:border-amber-500/50 shadow-[0_4px_12px_rgba(0,0,0,0.4)]"
+                    ? "bg-amber-500 border-amber-400 text-slate-950 shadow-[0_0_22px_rgba(245,158,11,0.5)] hover:shadow-[0_0_28px_rgba(245,158,11,0.7)]" 
+                    : "bg-black/50 border-white/10 text-amber-500 hover:border-amber-500/50 hover:bg-black/75 shadow-[0_4px_12px_rgba(0,0,0,0.4)]"
                 }`}
               >
-                <Icon size={26} className="stroke-[2.5]" />
+                <Icon size={26} className="stroke-[2.5] transition-transform duration-300 hover:rotate-6" />
               </Link>
               <span className={`absolute bottom-1.5 text-[10px] font-bold tracking-wide transition-colors ${
                 isActive ? "text-amber-500" : "text-slate-500"
@@ -48,25 +48,25 @@ export default function BottomNav() {
           <Link 
             key={item.href} 
             href={item.href}
-            className="relative flex flex-col items-center justify-center w-full h-full space-y-1"
+            className="group relative flex flex-col items-center justify-center w-full h-full space-y-1 transition-all duration-300 hover:scale-105 active:scale-95"
           >
             {/* Active Indicator Line for normal items */}
             {isActive && (
-              <div className="absolute top-0 w-10 h-[3px] bg-amber-500 rounded-b-full shadow-[0_0_12px_rgba(245,158,11,1)]" />
+              <div className="absolute top-0 w-10 h-[3px] bg-amber-500 rounded-b-full shadow-[0_0_12px_rgba(245,158,11,1)] animate-pulse" />
             )}
             
             <Icon 
               size={22} 
               className={`transition-all duration-300 ${
                 isActive 
-                  ? "text-amber-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]" 
-                  : "text-slate-400 group-hover:text-slate-300"
+                  ? "text-amber-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.6)] scale-105" 
+                  : "text-slate-400 group-hover:text-slate-200 group-hover:scale-110"
               }`} 
             />
             <span className={`text-[10px] font-medium transition-colors duration-300 ${
               isActive 
                 ? "text-amber-500 font-bold" 
-                : "text-slate-500"
+                : "text-slate-500 group-hover:text-slate-300"
             }`}>
               {item.name}
             </span>
