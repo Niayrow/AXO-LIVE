@@ -96,7 +96,7 @@ export default function Home() {
   ];
 
   return (
-    <div className="relative min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center pt-16 pb-16 px-6">
+    <div className="relative min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center pt-16 pb-28 px-6">
       
       {/* Subtle ambient glow */}
       <div className="absolute top-[-120px] left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-amber-500/8 blur-[160px] rounded-full pointer-events-none" />

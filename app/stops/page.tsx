@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { Search, MapPin, Bus, Clock, ChevronDown, Filter, Calendar } from "lucide-react";
+import { Search, MapPin, Clock, ChevronDown, Filter, Calendar, Map as MapIcon } from "lucide-react";
 import { getLineColor } from "@/components/lineColors";
 
 const TARGET_LINES = ["A", "B", "C1", "C2", "D"];
@@ -11,11 +12,17 @@ const TARGET_LINES = ["A", "B", "C1", "C2", "D"];
 function StopDetails({ stop, realtimeData }: { stop: any; realtimeData: any }) {
   const [showAllSchedule, setShowAllSchedule] = useState(false);
 
+  // Date picker state — default to today (empty string = today)
+  const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Paris" }); // YYYY-MM-DD
+  const [selectedDate, setSelectedDate] = useState(todayStr);
+  const isToday = selectedDate === todayStr;
+
   // Fetch scheduled/theoretical times for this stop
   const { data: scheduleData, isLoading: isScheduleLoading } = useQuery({
-    queryKey: ["stopSchedule", stop.stop_name],
+    queryKey: ["stopSchedule", stop.stop_name, selectedDate],
     queryFn: async () => {
-      const res = await fetch(`/api/axo/stop-schedule?stop_ids=${stop.stop_ids.join(",")}`);
+      const dateParam = isToday ? "" : `&date=${selectedDate}`;
+      const res = await fetch(`/api/axo/stop-schedule?stop_ids=${stop.stop_ids.join(",")}${dateParam}`);
       if (!res.ok) throw new Error("Failed to fetch schedule");
       return res.json();
     },
@@ -51,7 +58,12 @@ function StopDetails({ stop, realtimeData }: { stop: any; realtimeData: any }) {
     const schedules = scheduleData?.schedules || [];
     if (schedules.length === 0) return [];
 
-    // Get current Paris time in HH:MM:SS format
+    // If viewing a different date, always show the full day
+    if (!isToday || showAllSchedule) {
+      return schedules;
+    }
+
+    // For today: filter to upcoming only
     const now = new Date();
     const currentParisTime = now.toLocaleTimeString("fr-FR", { 
       timeZone: "Europe/Paris", 
@@ -61,29 +73,22 @@ function StopDetails({ stop, realtimeData }: { stop: any; realtimeData: any }) {
       second: "2-digit"
     });
 
-    // Separate into upcoming and past
     const upcoming = schedules.filter((s: any) => s.departure_time >= currentParisTime);
-    
-    if (showAllSchedule) {
-      return schedules; // return full day schedule sorted
-    }
-    
-    // Default: show next 6 upcoming scheduled runs
-    return upcoming.slice(0, 6);
-  }, [scheduleData, showAllSchedule]);
+    return upcoming.slice(0, 4);
+  }, [scheduleData, showAllSchedule, isToday]);
 
   return (
-    <div className="bg-slate-950/80 px-4 py-4 border-t border-white/5 space-y-5">
+    <div className="bg-slate-950/60 px-3.5 py-3.5 border-t border-white/5 space-y-4">
       {/* SECTION 1: PASSAGES EN DIRECT (REALTIME) */}
       <div>
-        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-          <Clock size={14} className="text-amber-500" />
+        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5 flex items-center gap-1.5">
+          <Clock size={12} className="text-amber-500" />
           Passages en direct
         </h4>
         
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {upcomingBuses.length === 0 ? (
-            <div className="text-sm text-slate-500 bg-slate-900/50 rounded-xl p-4 text-center border border-white/5">
+            <div className="text-[12px] text-slate-500 bg-slate-900/30 rounded-xl p-3 text-center border border-white/5">
               Aucun passage en direct prévu actuellement.
             </div>
           ) : (
@@ -92,10 +97,10 @@ function StopDetails({ stop, realtimeData }: { stop: any; realtimeData: any }) {
               const activeColor = getLineColor(b.vehicle.route_id);
               
               return (
-                <div key={`${b.vehicle.id}-${idx}`} className="flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-white/5 shadow-md">
-                  <div className="flex items-center gap-3">
+                <div key={`${b.vehicle.id}-${idx}`} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/40 border border-white/5 shadow-sm">
+                  <div className="flex items-center gap-2.5">
                     <div 
-                      className="w-10 h-10 rounded-full flex items-center justify-center font-black text-sm border shadow-inner"
+                      className="w-8 h-8 rounded-full flex items-center justify-center font-black text-xs border shadow-inner"
                       style={{
                         backgroundColor: `${activeColor}20`,
                         color: activeColor,
@@ -105,24 +110,34 @@ function StopDetails({ stop, realtimeData }: { stop: any; realtimeData: any }) {
                       {b.vehicle.route_id || "B"}
                     </div>
                     <div className="flex flex-col min-w-0">
-                      <span className="text-[13px] font-bold text-slate-200 truncate">
+                      <span className="text-[12px] font-bold text-slate-200 truncate">
                         Bus {b.vehicle.vehicle_id}
                       </span>
-                      <span className="text-[10px] text-slate-400 font-semibold truncate mt-0.5" style={{ color: activeColor }}>
+                      <span className="text-[9px] text-slate-400 font-semibold truncate mt-0.5" style={{ color: activeColor }}>
                         Direction: {b.vehicle.trip_headsign || "Inconnue"}
                       </span>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div 
-                      className="text-sm font-black" 
-                      style={isImminent ? { color: activeColor, animation: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite" } : { color: "#cbd5e1" }}
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <div 
+                        className="text-xs font-black" 
+                        style={isImminent ? { color: activeColor, animation: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite" } : { color: "#cbd5e1" }}
+                      >
+                        {isImminent ? "À l'approche" : `${b.etaMinutes} min`}
+                      </div>
+                      <div className="text-[9px] font-medium text-slate-500">
+                        {new Date(b.arrivalTime * 1000).toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                    </div>
+
+                    <Link
+                      href={`/map?bus=${b.vehicle.id}`}
+                      className="p-2 rounded-xl bg-slate-950/80 border border-white/5 text-slate-400 hover:text-amber-500 hover:border-amber-500/30 transition-all shadow-md shrink-0 flex items-center justify-center cursor-pointer hover:scale-105 active:scale-95"
+                      title="Voir sur la carte"
                     >
-                      {isImminent ? "À l'approche" : `${b.etaMinutes} min`}
-                    </div>
-                    <div className="text-[10px] font-medium text-slate-500">
-                      {new Date(b.arrivalTime * 1000).toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" })}
-                    </div>
+                      <MapIcon size={14} />
+                    </Link>
                   </div>
                 </div>
               );
@@ -132,64 +147,89 @@ function StopDetails({ stop, realtimeData }: { stop: any; realtimeData: any }) {
       </div>
 
       {/* SECTION 2: HORAIRES PREVISIONNELS (GTFS SCHEDULE) */}
-      <div className="border-t border-white/5 pt-4">
-        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-          <Calendar size={14} className="text-purple-400" />
-          Horaires théoriques
-        </h4>
+      <div className="border-t border-white/5 pt-3">
+        <div className="flex items-center justify-between mb-2.5">
+          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+            <Calendar size={12} className="text-purple-400" />
+            Horaires théoriques
+          </h4>
+          <div className="flex items-center gap-1.5">
+            {!isToday && (
+              <button
+                onClick={() => setSelectedDate(todayStr)}
+                className="text-[9px] font-bold text-amber-500 hover:text-amber-400 transition-colors uppercase tracking-wider cursor-pointer"
+              >
+                Aujourd'hui
+              </button>
+            )}
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => {
+                setSelectedDate(e.target.value);
+                setShowAllSchedule(false);
+              }}
+              className="bg-slate-900/60 border border-white/10 rounded-lg px-2 py-1 text-[10px] font-bold text-slate-300 focus:outline-none focus:ring-1 focus:ring-purple-500/50 transition-all cursor-pointer [color-scheme:dark]"
+            />
+          </div>
+        </div>
 
         {isScheduleLoading ? (
-          <div className="text-center py-4 text-xs text-slate-500 animate-pulse">Chargement de la grille horaire...</div>
+          <div className="text-center py-3 text-[11px] text-slate-500 animate-pulse">Chargement de la grille horaire...</div>
         ) : processedSchedules.length === 0 ? (
-          <div className="text-sm text-slate-500 bg-slate-900/50 rounded-xl p-4 text-center border border-white/5">
-            Aucun horaire planifié pour le reste de la journée.
+          <div className="text-[12px] text-slate-500 bg-slate-900/30 rounded-xl p-3 text-center border border-white/5">
+            {isToday
+              ? "Aucun horaire planifié pour le reste de la journée."
+              : `Aucun horaire planifié pour le ${new Date(selectedDate + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}.`
+            }
           </div>
         ) : (
-          <div className="space-y-2">
-            {processedSchedules.map((sched: any, idx: number) => {
-              const activeColor = getLineColor(sched.route_id);
-              // Format HH:MM:SS to HH:MM
-              const timeFormatted = sched.departure_time.slice(0, 5);
+          <div className="space-y-1.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+              {processedSchedules.map((sched: any, idx: number) => {
+                const activeColor = getLineColor(sched.route_id);
+                const timeFormatted = sched.departure_time.slice(0, 5);
 
-              return (
-                <div 
-                  key={`${sched.trip_id}-${idx}`} 
-                  className="flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-white/5 shadow-sm"
-                >
-                  <div className="flex items-center gap-3 min-w-0 flex-1 mr-2">
-                    <span 
-                      className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black shrink-0 border shadow-inner"
-                      style={{
-                        backgroundColor: `${activeColor}15`,
-                        color: activeColor,
-                        borderColor: `${activeColor}40`
-                      }}
-                    >
-                      {sched.route_id}
-                    </span>
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-[13px] font-bold text-slate-200 truncate">
-                        Ligne {sched.route_id}
+                return (
+                  <div 
+                    key={`${sched.trip_id}-${idx}`} 
+                    className="flex items-center justify-between p-2 rounded-xl bg-slate-900/40 border border-white/5 shadow-sm"
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
+                      <span 
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 border shadow-inner"
+                        style={{
+                          backgroundColor: `${activeColor}15`,
+                          color: activeColor,
+                          borderColor: `${activeColor}40`
+                        }}
+                      >
+                        {sched.route_id}
                       </span>
-                      <span className="text-[10px] text-slate-500 font-medium truncate mt-0.5">
-                        Vers : {sched.trip_headsign || "Inconnue"}
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-[11px] font-bold text-slate-200 truncate">
+                          Ligne {sched.route_id}
+                        </span>
+                        <span className="text-[9px] text-slate-500 font-medium truncate">
+                          Vers : {sched.trip_headsign || "Inconnue"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="text-xs font-black text-slate-250 tracking-wide bg-slate-950 px-2 py-0.5 rounded border border-white/5 shadow-inner">
+                        {timeFormatted}
                       </span>
                     </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <span className="text-sm font-black text-slate-200 tracking-wide bg-slate-950 px-2.5 py-1 rounded-lg border border-white/5 shadow-inner">
-                      {timeFormatted}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
 
             {/* Toggle to see whole day schedules */}
-            {scheduleData?.schedules && scheduleData.schedules.length > 6 && (
+            {scheduleData?.schedules && scheduleData.schedules.length > 4 && (
               <button
                 onClick={() => setShowAllSchedule(!showAllSchedule)}
-                className="w-full text-center py-2 text-xs font-semibold text-slate-400 hover:text-amber-500 transition-colors pt-2"
+                className="w-full text-center py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-amber-500 transition-colors pt-1"
               >
                 {showAllSchedule ? "Voir moins d'horaires" : `Voir toute la journée (${scheduleData.schedules.length} départs)`}
               </button>
@@ -283,20 +323,20 @@ export default function StopsPage() {
 
   return (
     <div className="min-h-full flex flex-col bg-slate-950 text-white pb-24">
-      {/* Header */}
+      {/* Sticky Header */}
       <header className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur-xl border-b border-white/10 pt-safe-top shadow-xl">
-        <div className="px-6 py-4">
-          <h1 className="text-2xl font-black tracking-tight text-white mb-3">Liste des arrêts</h1>
+        <div className="max-w-2xl mx-auto w-full px-5 py-4">
+          <h1 className="text-xl font-black tracking-tight text-white mb-3">Liste des arrêts</h1>
           
           {/* Search bar */}
           <div className="relative mb-3">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input 
               type="text" 
               placeholder="Rechercher un arrêt..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-800 rounded-2xl py-3 pl-12 pr-4 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 transition-all text-sm"
+              className="w-full bg-slate-900 border border-white/5 rounded-2xl py-2.5 pl-11 pr-4 text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-500/50 transition-all text-sm shadow-inner"
             />
           </div>
 
@@ -304,13 +344,13 @@ export default function StopsPage() {
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
             <button
               onClick={() => setSelectedLine(null)}
-              className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1 border ${
+              className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider whitespace-nowrap transition-all flex items-center gap-1 border ${
                 selectedLine === null
-                  ? "bg-white text-slate-950 border-white"
-                  : "bg-slate-900/60 text-slate-400 border-slate-800 hover:text-white"
+                  ? "bg-amber-500 text-slate-950 border-amber-500 shadow-[0_0_12px_rgba(245,158,11,0.3)]"
+                  : "bg-slate-900/60 text-slate-450 border-white/5 hover:text-white"
               }`}
             >
-              <Filter size={12} />
+              <Filter size={10} />
               Tous
             </button>
             
@@ -322,14 +362,15 @@ export default function StopsPage() {
                 <button
                   key={lineId}
                   onClick={() => setSelectedLine(isSelected ? null : lineId)}
-                  className="px-4.5 py-1.5 rounded-full text-xs font-black whitespace-nowrap transition-all border"
+                  className="px-3.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider whitespace-nowrap transition-all border"
                   style={{
-                    backgroundColor: isSelected ? activeColor : "rgba(15, 23, 42, 0.6)",
+                    backgroundColor: isSelected ? activeColor : "rgba(15, 23, 42, 0.4)",
                     color: isSelected ? "#000" : activeColor,
-                    borderColor: isSelected ? activeColor : `${activeColor}33`,
+                    borderColor: isSelected ? activeColor : `${activeColor}22`,
+                    boxShadow: isSelected ? `0 0 12px ${activeColor}40` : "none"
                   }}
                 >
-                  Ligne {lineId}
+                  {lineId}
                 </button>
               );
             })}
@@ -337,14 +378,15 @@ export default function StopsPage() {
         </div>
       </header>
 
-      <main className="flex-1 px-4 py-4 space-y-3">
+      {/* Main List */}
+      <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-4 space-y-2">
         {isStopsLoading ? (
           <div className="flex flex-col items-center justify-center py-20 opacity-50">
-             <div className="w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mb-4" />
-             <div className="text-slate-400 font-medium tracking-wide">Chargement du réseau...</div>
+             <div className="w-8 h-8 border-3 border-amber-500 border-t-transparent rounded-full animate-spin mb-3" />
+             <div className="text-slate-400 text-xs font-semibold tracking-wider uppercase">Chargement des arrêts...</div>
           </div>
         ) : filteredStops.length === 0 ? (
-          <div className="text-center py-10 text-slate-500">
+          <div className="text-center py-12 text-slate-500 text-sm">
             Aucun arrêt trouvé {selectedLine ? `sur la Ligne ${selectedLine}` : ""} {search ? `pour "${search}"` : ""}
           </div>
         ) : (
@@ -354,45 +396,45 @@ export default function StopsPage() {
             return (
               <div 
                 key={stop.stop_name} 
-                className="bg-slate-900 border border-white/5 rounded-2xl overflow-hidden transition-all duration-300 shadow-lg"
+                className="bg-slate-900/50 border border-white/[0.05] rounded-xl overflow-hidden transition-all duration-300 shadow-md"
               >
-                {/* Stop Header (Clickable) */}
+                {/* Stop Header (Clickable - single row layout) */}
                 <button 
                   onClick={() => setExpandedStopId(isExpanded ? null : stop.stop_name)}
-                  className="w-full flex items-center justify-between p-4 text-left focus:outline-none hover:bg-slate-800/50 transition-colors"
+                  className="w-full flex items-center justify-between p-3 text-left focus:outline-none hover:bg-slate-800/30 transition-colors"
                 >
-                  <div className="flex items-center gap-3 min-w-0 flex-1 mr-2">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-colors ${isExpanded ? "bg-amber-500/20 text-amber-500" : "bg-slate-800 text-slate-400"}`}>
-                      <MapPin size={20} />
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-colors ${isExpanded ? "bg-amber-500/10 text-amber-500 border border-amber-500/20" : "bg-slate-850 text-slate-400 border border-white/5"}`}>
+                      <MapPin size={16} />
                     </div>
-                    <div className="flex flex-col min-w-0">
-                      <span className="font-semibold text-slate-200 text-base tracking-wide truncate">{stop.stop_name}</span>
-                      
-                      {/* Line Badges directly under the Stop name */}
-                      <div className="flex items-center gap-1.5 mt-1.5">
-                        {stop.lines.map((l: string) => {
-                          const lineColor = getLineColor(l);
-                          return (
-                            <span 
-                              key={l}
-                              className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border"
-                              style={{
-                                color: lineColor,
-                                borderColor: `${lineColor}40`,
-                                backgroundColor: `${lineColor}15`
-                              }}
-                            >
-                              {l}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </div>
+                    <span className="font-bold text-slate-200 text-sm tracking-wide truncate">{stop.stop_name}</span>
                   </div>
-                  <ChevronDown 
-                    size={18} 
-                    className={`text-slate-500 shrink-0 transition-transform duration-300 ${isExpanded ? "rotate-180 text-amber-500" : ""}`} 
-                  />
+                  
+                  <div className="flex items-center gap-3 shrink-0 ml-2">
+                    {/* Line Badges Inline on the right side */}
+                    <div className="flex items-center gap-1">
+                      {stop.lines.map((l: string) => {
+                        const lineColor = getLineColor(l);
+                        return (
+                          <span 
+                            key={l}
+                            className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border shrink-0"
+                            style={{
+                              color: lineColor,
+                              borderColor: `${lineColor}40`,
+                              backgroundColor: `${lineColor}15`
+                            }}
+                          >
+                            {l}
+                          </span>
+                        );
+                      })}
+                    </div>
+                    <ChevronDown 
+                      size={16} 
+                      className={`text-slate-500 transition-transform duration-300 ${isExpanded ? "rotate-180 text-amber-500" : ""}`} 
+                    />
+                  </div>
                 </button>
 
                 {/* Expanded Content: StopDetails Subcomponent */}

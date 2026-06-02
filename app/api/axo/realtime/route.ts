@@ -114,10 +114,20 @@ export async function GET(req: NextRequest) {
                 stop_sequence: stu.stopSequence,
                 stop_id: stu.stopId,
                 arrival: stu.arrival?.time?.low || stu.arrival?.time
-                  ? { time: Number(stu.arrival.time?.low || stu.arrival.time) }
+                  ? { 
+                      time: Number(stu.arrival.time?.low || stu.arrival.time),
+                      delay: stu.arrival.delay !== undefined && stu.arrival.delay !== null
+                        ? Number(stu.arrival.delay?.low || stu.arrival.delay)
+                        : undefined
+                    }
                   : null,
                 departure: stu.departure?.time?.low || stu.departure?.time
-                  ? { time: Number(stu.departure.time?.low || stu.departure.time) }
+                  ? { 
+                      time: Number(stu.departure.time?.low || stu.departure.time),
+                      delay: stu.departure.delay !== undefined && stu.departure.delay !== null
+                        ? Number(stu.departure.delay?.low || stu.departure.delay)
+                        : undefined
+                    }
                   : null,
               }))
           : []

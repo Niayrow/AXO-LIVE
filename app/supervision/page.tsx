@@ -90,7 +90,7 @@ export default function SupervisionPage() {
   ) || [];
 
   return (
-    <div className="min-h-full flex flex-col bg-slate-950 text-white">
+    <div className="min-h-full flex flex-col bg-slate-950 text-white pb-24">
       {/* Fixed Header with Line Selector */}
       <header className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur-xl border-b border-white/10 pt-safe-top shadow-xl">
         <div className="flex items-center justify-between px-6 py-4">

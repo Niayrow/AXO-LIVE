@@ -41,22 +41,38 @@ export async function GET(req: NextRequest) {
 
     const { routes, trips, stopTimes, calendar, calendarDates } = cachedData;
 
-    // 1. Calculate active service_ids for TODAY in Paris Timezone
-    const parisDate = new Date();
-    const formatterDate = new Intl.DateTimeFormat("fr-FR", {
-      timeZone: "Europe/Paris",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit"
-    });
-    const [{ value: day }, , { value: month }, , { value: year }] = formatterDate.formatToParts(parisDate);
-    const yyyymmdd = `${year}${month}${day}`; // e.g. "20260524"
+    // 1. Calculate active service_ids for the requested date (or TODAY) in Paris Timezone
+    const dateParam = searchParams.get("date"); // Optional: YYYY-MM-DD format
+    let targetDate: Date;
+    let yyyymmdd: string;
+    let dayOfWeek: string;
 
-    const formatterDayOfWeek = new Intl.DateTimeFormat("en-US", {
-      timeZone: "Europe/Paris",
-      weekday: "long"
-    });
-    const dayOfWeek = formatterDayOfWeek.format(parisDate).toLowerCase(); // e.g. "sunday"
+    if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+      // Parse the provided date in Paris timezone
+      targetDate = new Date(dateParam + "T12:00:00+02:00");
+      const [y, m, d] = dateParam.split("-");
+      yyyymmdd = `${y}${m}${d}`;
+      const dayFormatter = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Europe/Paris",
+        weekday: "long"
+      });
+      dayOfWeek = dayFormatter.format(targetDate).toLowerCase();
+    } else {
+      targetDate = new Date();
+      const formatterDate = new Intl.DateTimeFormat("fr-FR", {
+        timeZone: "Europe/Paris",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+      });
+      const [{ value: day }, , { value: month }, , { value: year }] = formatterDate.formatToParts(targetDate);
+      yyyymmdd = `${year}${month}${day}`;
+      const formatterDayOfWeek = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Europe/Paris",
+        weekday: "long"
+      });
+      dayOfWeek = formatterDayOfWeek.format(targetDate).toLowerCase();
+    }
 
     const activeServiceIds = new Set<string>();
 

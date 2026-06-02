@@ -13,16 +13,16 @@ export default function AboutPage() {
       <div className="absolute top-[-100px] left-1/2 -translate-x-1/2 w-[400px] h-[400px] bg-amber-500/8 blur-[160px] rounded-full pointer-events-none" />
       <div className="absolute bottom-[-100px] right-[-50px] w-[300px] h-[300px] bg-amber-500/5 blur-[120px] rounded-full pointer-events-none" />
 
-      <div className="relative z-10 w-full max-w-md flex flex-col">
+      {/* Back button (Floating glassmorphic circular button in the top-left corner of the screen) */}
+      <Link
+        href="/"
+        className="absolute top-6 left-6 flex items-center justify-center w-10 h-10 rounded-full bg-slate-900/60 backdrop-blur-md border border-white/10 text-slate-400 hover:text-white hover:border-white/20 hover:bg-slate-850 transition-all duration-300 hover:scale-110 active:scale-95 shadow-[0_4px_12px_rgba(0,0,0,0.3)] group z-20"
+        title="Retour"
+      >
+        <ArrowLeft size={18} className="group-hover:-translate-x-0.5 transition-transform" />
+      </Link>
 
-        {/* Back button */}
-        <Link
-          href="/"
-          className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors mb-8 group w-fit"
-        >
-          <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
-          Retour
-        </Link>
+      <div className="relative z-10 w-full max-w-md flex flex-col">
 
         {/* Header */}
         <div className="text-center mb-10">

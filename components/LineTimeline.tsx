@@ -69,7 +69,7 @@ export default function LineTimeline({ stops, vehicles, lineColor = "#34d399" }:
             ...vehicle,
             statusText,
             statusColor,
-            delayText: isDelayed ? `+${delayMins} min` : "À l'heure",
+            delayText: isDelayed ? `Retard de ${delayMins} min` : "À l'heure",
             isDelayed,
           };
         }

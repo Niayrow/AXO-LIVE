@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import BottomNav from "@/components/BottomNav";
+import ContactBubble from "@/components/ContactBubble";
 import Providers from "./providers";
 import { Analytics } from "@vercel/analytics/react";
 
@@ -35,10 +36,11 @@ export default function RootLayout({
     <html lang="fr" className="dark">
       <body className={`${inter.className} bg-slate-950 text-slate-50 overscroll-none h-screen w-screen overflow-hidden`}>
         <Providers>
-          <div className="h-full w-full pb-20 overflow-y-auto no-scrollbar">
+          <div className="h-full w-full overflow-y-auto no-scrollbar">
             {children}
           </div>
           <BottomNav />
+          <ContactBubble />
         </Providers>
         <Analytics />
       </body>

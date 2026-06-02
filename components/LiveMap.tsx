@@ -540,17 +540,45 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
     refetchInterval: 120000, // every 2 minutes
   });
 
-  // Combine active alerts into a single string for the scrolling marquee ticker
-  const scrollingAlertText = useMemo(() => {
+  // Combine active alerts into JSX elements for the scrolling marquee ticker
+  const scrollingAlertContent = useMemo(() => {
     if (!alertsData?.alerts || alertsData.alerts.length === 0) {
-      return "✅ Trafic normal sur l'ensemble du réseau AXO. Aucun incident signalé. Voyagez sereinement !";
+      return (
+        <span className="flex items-center gap-1.5">
+          ✅ Trafic normal sur l'ensemble du réseau AXO. Aucun incident signalé. Voyagez sereinement !
+        </span>
+      );
     }
-    return alertsData.alerts
-      .map((a: any) => {
-        const linesStr = a.impactedLines?.length > 0 ? ` [Ligne ${a.impactedLines.join(", ")}]` : "";
-        return `⚠️ ${a.title} : ${a.description}${linesStr}`;
-      })
-      .join("    |    ");
+
+    return (
+      <div className="flex items-center gap-6">
+        {alertsData.alerts.map((a: any, i: number) => (
+          <div key={i} className="flex items-center gap-2 shrink-0">
+            {i > 0 && <span className="text-slate-600 font-normal mx-2">|</span>}
+            <span>⚠️ {a.title} : {a.description}</span>
+            {a.impactedLines?.map((lineId: string) => {
+              const cleanLine = lineId.replace(' ', '');
+              const lineColor = getLineColor(cleanLine);
+              return (
+                <span
+                  key={lineId}
+                  className="w-5 h-5 rounded-md flex items-center justify-center font-black text-[10px] border shadow-md shrink-0 ml-1"
+                  style={{
+                    backgroundColor: `${lineColor}25`,
+                    color: lineColor,
+                    borderColor: `${lineColor}90`,
+                    boxShadow: `0 0 6px ${lineColor}20`
+                  }}
+                  title={`Ligne ${cleanLine}`}
+                >
+                  {cleanLine}
+                </span>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    );
   }, [alertsData]);
 
   // Derive exact generation time of the GTFS-RT feed from OiseMob server
@@ -868,7 +896,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
   const center: [number, number] = [49.2583, 2.4764];
 
   return (
-    <div className="relative w-full h-[calc(100vh-80px)] overflow-hidden bg-slate-950">
+    <div className="relative w-full h-full overflow-hidden bg-slate-950">
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes marquee-scroll {
           0% { transform: translate3d(0, 0, 0); }
@@ -884,7 +912,9 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
           100% { transform: translate3d(-100%, 0, 0); }
         }
         .animate-marquee-alert {
-          display: inline-block;
+          display: inline-flex;
+          align-items: center;
+          gap: 16px;
           white-space: nowrap;
           animation: marquee-alert-scroll 32s linear infinite;
         }
@@ -894,18 +924,31 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
       `}} />
 
       {/* Top Floating Marquee Alert Banner */}
-      {scrollingAlertText && (
-        <div className="absolute top-0 md:top-4 left-0 md:left-1/2 md:-translate-x-1/2 z-[1000] w-full md:w-[60vw] max-w-3xl h-8 md:h-9 bg-slate-950/85 backdrop-blur-xl border-b md:border border-white/10 rounded-none md:rounded-full flex items-center px-4 shadow-[0_8px_32px_rgba(0,0,0,0.5)] overflow-hidden pointer-events-auto">
-          <div className="flex items-center gap-2 shrink-0 bg-slate-950/90 z-10 pr-2.5 border-r border-white/5 h-full">
-            <span className={`w-2 h-2 rounded-full ${(!alertsData?.alerts || alertsData.alerts.length === 0) ? "bg-emerald-500" : "bg-red-500 animate-ping"}`} />
-            <span className={`text-[10px] font-black uppercase tracking-widest ${(!alertsData?.alerts || alertsData.alerts.length === 0) ? "text-emerald-400" : "text-red-400"}`}>
-              {(!alertsData?.alerts || alertsData.alerts.length === 0) ? "Réseau" : "Alerte"}
+      {scrollingAlertContent && (
+        <div className="absolute top-0 md:top-4 left-0 md:left-1/2 md:-translate-x-1/2 z-[1000] w-full md:w-[60vw] max-w-3xl h-8 md:h-9 bg-slate-950/40 backdrop-blur-xl border-b md:border border-white/10 rounded-none md:rounded-full flex items-center px-4 shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-hidden pointer-events-auto">
+          <div className="flex items-center gap-2 shrink-0 bg-slate-950/70 backdrop-blur-md z-10 pr-3 border-r border-white/10 h-full">
+            <span className="relative flex h-2 w-2">
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${(!alertsData?.alerts || alertsData.alerts.length === 0) ? "bg-emerald-500" : "bg-red-500"}`} />
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${(!alertsData?.alerts || alertsData.alerts.length === 0) ? "bg-emerald-500" : "bg-red-500"}`} />
+            </span>
+            <span className={`text-[9px] font-black uppercase tracking-widest ${(!alertsData?.alerts || alertsData.alerts.length === 0) ? "text-emerald-400" : "text-red-400"}`}>
+              {(!alertsData?.alerts || alertsData.alerts.length === 0) ? (
+                <>
+                  <span className="hidden md:inline">Trafic Normal</span>
+                  <span className="inline md:hidden">Normal</span>
+                </>
+              ) : (
+                <>
+                  <span className="hidden md:inline">Alerte en direct du réseau</span>
+                  <span className="inline md:hidden">Alerte</span>
+                </>
+              )}
             </span>
           </div>
           
           <div className="flex-1 overflow-hidden relative mx-3 h-full flex items-center">
             <div className="animate-marquee-alert text-[11px] font-bold text-slate-300">
-              {scrollingAlertText}
+              {scrollingAlertContent}
             </div>
           </div>
         </div>
@@ -1454,6 +1497,11 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
         .leaflet-container {
           background-color: #090909 !important;
         }
+
+        /* Add subtle warm color tint to the dark map tiles */
+        .leaflet-tile-pane {
+          filter: saturate(1.6) brightness(1.05) hue-rotate(5deg) !important;
+        }
       `}} />
 
       {/* Map layer */}
@@ -1519,37 +1567,52 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                 weight = 1.5;
               }
             } else {
-              // Rule 1: Initial state - subtle ambient network lines to avoid spaghetti clutter
+              // Rule 1: Initial state - colorful ambient network lines
               if (isPrimary) {
-                opacity = 0.30;
-                weight = 3.5;
+                opacity = 0.50;
+                weight = 4;
               } else {
-                opacity = 0.15;
-                weight = 2;
+                opacity = 0.25;
+                weight = 2.5;
               }
             }
 
             return (
-              <Polyline
-                key={`shape-${shape.shape_id || Math.random()}`}
-                positions={shape.coordinates}
-                interactive={true}
-                eventHandlers={{
-                  click: (e) => {
-                    L.DomEvent.stopPropagation(e);
-                    setSelectedLineId(shape.route_id);
-                    setSelectedBusId(null);
-                    setSelectedStopId(null);
-                  }
-                }}
-                pathOptions={{
-                  color: getLineColor(shape.route_id),
-                  weight: weight,
-                  opacity: opacity,
-                  lineCap: "round",
-                  lineJoin: "round",
-                }}
-              />
+              <Fragment key={`shape-group-${shape.shape_id || Math.random()}`}>
+                {/* Neon glow shadow under selected lines */}
+                {isLineSelected && (
+                  <Polyline
+                    positions={shape.coordinates}
+                    interactive={false}
+                    pathOptions={{
+                      color: getLineColor(shape.route_id),
+                      weight: 14,
+                      opacity: 0.15,
+                      lineCap: "round",
+                      lineJoin: "round",
+                    }}
+                  />
+                )}
+                <Polyline
+                  positions={shape.coordinates}
+                  interactive={true}
+                  eventHandlers={{
+                    click: (e) => {
+                      L.DomEvent.stopPropagation(e);
+                      setSelectedLineId(shape.route_id);
+                      setSelectedBusId(null);
+                      setSelectedStopId(null);
+                    }
+                  }}
+                  pathOptions={{
+                    color: getLineColor(shape.route_id),
+                    weight: weight,
+                    opacity: opacity,
+                    lineCap: "round",
+                    lineJoin: "round",
+                  }}
+                />
+              </Fragment>
             );
           })}
 
@@ -1705,7 +1768,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                               ? "bg-orange-500/15 border-orange-500/30 text-orange-400 shadow-[0_0_6px_rgba(249,115,22,0.15)]"
                               : "bg-emerald-500/15 border-emerald-500/30 text-emerald-400 shadow-[0_0_6px_rgba(16,185,129,0.15)]"
                           }`}>
-                            {(selectedBus.delay || 0) > 60 ? `+${Math.round((selectedBus.delay || 0) / 60)}m` : "À l'heure"}
+                            {(selectedBus.delay || 0) > 60 ? `Retard de ${Math.round((selectedBus.delay || 0) / 60)} min` : "À l'heure"}
                           </span>
                         )}
                         <span className={`hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[7px] md:text-[8px] font-black uppercase tracking-wider ${
@@ -1796,7 +1859,28 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                     const expectedTime = hasUpdate
                       ? new Date((update.arrival!.time as number) * 1000).toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" })
                       : null;
-                    const delayMin = hasUpdate ? Math.round((update.arrival?.delay || 0) / 60) : 0;
+                    
+                    let delayMin = 0;
+                    if (hasUpdate && expectedTime) {
+                      if (update.arrival?.delay !== undefined && update.arrival?.delay !== null && update.arrival?.delay !== 0) {
+                        delayMin = Math.round(update.arrival.delay / 60);
+                      } else {
+                        // Fallback: calculate delay from the difference between expectedTime and scheduledTime
+                        const timeToMinutes = (tStr: string) => {
+                          const parts = tStr.split(":");
+                          return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+                        };
+                        const expectedMins = timeToMinutes(expectedTime);
+                        const scheduledMins = timeToMinutes(scheduledTime);
+                        let calculatedDelay = expectedMins - scheduledMins;
+                        if (calculatedDelay < -1000) {
+                          calculatedDelay += 1440;
+                        } else if (calculatedDelay > 1000) {
+                          calculatedDelay -= 1440;
+                        }
+                        delayMin = calculatedDelay;
+                      }
+                    }
                     const activeColor = getLineColor(selectedBus.route_id);
 
                     const dotClass = isPassed ? "bg-slate-700 border-slate-600" : isNext ? "animate-pulse" : "bg-slate-500 border-slate-700";
@@ -1879,11 +1963,11 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                                   </span>
                                 ) : delayMin > 0 ? (
                                   <span className="px-1 py-0.2 rounded bg-red-500/10 border border-red-500/20 text-red-400">
-                                    +{delayMin}m
+                                    Retard de {delayMin} min
                                   </span>
                                 ) : delayMin < 0 ? (
                                   <span className="px-1 py-0.2 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-                                    {delayMin}m
+                                    Avance de {Math.abs(delayMin)} min
                                   </span>
                                 ) : (
                                   <span className="px-1 py-0.2 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
