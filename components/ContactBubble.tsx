@@ -7,7 +7,7 @@ export default function ContactBubble() {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <div className="fixed bottom-24 right-4 z-[60] flex flex-col items-end gap-3">
+    <div className="fixed bottom-24 right-4 z-[60] flex flex-col items-end gap-3 pointer-events-none">
       {/* Contact Card */}
       <div
         className={`w-72 bg-slate-950/70 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_16px_48px_rgba(0,0,0,0.6)] overflow-hidden transition-all duration-300 origin-bottom-right ${
@@ -67,7 +67,7 @@ export default function ContactBubble() {
       {/* Floating Bubble Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-12 h-12 rounded-full flex items-center justify-center shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-all duration-300 cursor-pointer hover:scale-110 active:scale-95 border ${
+        className={`w-12 h-12 rounded-full flex items-center justify-center shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-all duration-300 cursor-pointer hover:scale-110 active:scale-95 border pointer-events-auto ${
           isOpen
             ? "bg-slate-950/80 backdrop-blur-xl border-white/10 text-slate-300 rotate-0"
             : "bg-amber-500 border-amber-400 text-slate-950 shadow-[0_0_20px_rgba(245,158,11,0.4)]"
