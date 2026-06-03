@@ -34,9 +34,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="fr" className="dark">
-      <body className={`${inter.className} bg-slate-950 text-slate-50 overscroll-none h-screen w-screen overflow-hidden`}>
+      <body className={`${inter.className} bg-slate-950 text-slate-50 overscroll-none h-[100dvh] w-full max-w-[100vw] overflow-hidden`}>
         <Providers>
-          <div className="h-full w-full overflow-y-auto no-scrollbar">
+          <div className="h-full w-full overflow-y-auto overflow-x-hidden no-scrollbar">
             {children}
           </div>
           <BottomNav />
