@@ -2,9 +2,13 @@
 
 import { useState } from "react";
 import { MessageCircle, X, Mail } from "lucide-react";
+import { usePathname } from "next/navigation";
 
 export default function ContactBubble() {
   const [isOpen, setIsOpen] = useState(false);
+  const pathname = usePathname();
+
+  if (pathname === "/map") return null;
 
   return (
     <div className="fixed bottom-24 right-4 z-[60] flex flex-col items-end gap-3 pointer-events-none">

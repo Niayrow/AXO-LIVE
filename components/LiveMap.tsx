@@ -37,6 +37,7 @@ export interface Vehicle {
   }[];
   trip_headsign?: string;
   current_status?: number;
+  timestamp?: number;
 }
 
 interface LiveMapProps {
@@ -482,28 +483,79 @@ function MapFocusController({
   highlightedBus: Vehicle | null;
 }) {
   const map = useMap();
+  const lastFocusedIdRef = useRef<string | null>(null);
+  const lastFocusedStopIdRef = useRef<string | null>(null);
 
   useEffect(() => {
+    // 1. Prioritize Highlighted Bus (temporary hover or focus)
     if (highlightedBus?.position?.lat && highlightedBus?.position?.lon) {
-      map.flyTo(
-        [highlightedBus.position.lat, highlightedBus.position.lon],
-        18,
-        { animate: true, duration: 1.2 }
-      );
-    } else if (selectedBus?.position?.lat && selectedBus?.position?.lon) {
-      map.flyTo(
-        [selectedBus.position.lat, selectedBus.position.lon],
-        18,
-        { animate: true, duration: 1.2 }
-      );
-    } else if (selectedStop?.stop_lat && selectedStop?.stop_lon) {
-      map.flyTo(
-        [selectedStop.stop_lat, selectedStop.stop_lon],
-        18,
-        { animate: true, duration: 1.2 }
-      );
+      const focusKey = `highlight-${highlightedBus.id}`;
+      if (lastFocusedIdRef.current !== focusKey) {
+        lastFocusedIdRef.current = focusKey;
+        map.flyTo(
+          [highlightedBus.position.lat, highlightedBus.position.lon],
+          18,
+          { animate: true, duration: 1.2 }
+        );
+      }
     }
-  }, [selectedBus?.id, selectedStop?.stop_id, highlightedBus?.id, map]);
+    // 2. Selected Bus (deep linked or clicked)
+    else if (selectedBus?.position?.lat && selectedBus?.position?.lon) {
+      const focusKey = `bus-${selectedBus.id}`;
+      if (lastFocusedIdRef.current !== focusKey) {
+        lastFocusedIdRef.current = focusKey;
+        
+        // Use a small timeout to ensure map container has adjusted and is fully ready
+        const timer = setTimeout(() => {
+          map.flyTo(
+            [selectedBus.position.lat, selectedBus.position.lon],
+            18,
+            { animate: true, duration: 1.2 }
+          );
+        }, 100);
+        return () => clearTimeout(timer);
+      }
+    }
+    // 3. Selected Stop
+    else if (selectedStop?.stop_lat && selectedStop?.stop_lon) {
+      const focusKey = `stop-${selectedStop.stop_id}`;
+      if (lastFocusedStopIdRef.current !== focusKey) {
+        lastFocusedStopIdRef.current = focusKey;
+        const timer = setTimeout(() => {
+          map.flyTo(
+            [selectedStop.stop_lat, selectedStop.stop_lon],
+            18,
+            { animate: true, duration: 1.2 }
+          );
+        }, 100);
+        return () => clearTimeout(timer);
+      }
+    }
+
+    // Reset focused refs if selections are cleared
+    if (!selectedBus) {
+      if (lastFocusedIdRef.current && lastFocusedIdRef.current.startsWith("bus-")) {
+        lastFocusedIdRef.current = null;
+      }
+    }
+    if (!highlightedBus) {
+      if (lastFocusedIdRef.current && lastFocusedIdRef.current.startsWith("highlight-")) {
+        lastFocusedIdRef.current = null;
+      }
+    }
+    if (!selectedStop) {
+      lastFocusedStopIdRef.current = null;
+    }
+  }, [
+    selectedBus?.id, 
+    selectedBus?.position?.lat, 
+    selectedBus?.position?.lon,
+    selectedStop?.stop_id, 
+    highlightedBus?.id,
+    highlightedBus?.position?.lat,
+    highlightedBus?.position?.lon,
+    map
+  ]);
 
   return null;
 }
@@ -1560,39 +1612,41 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
             if (hasActiveFilter) {
               if (isLineSelected) {
                 opacity = 1.0;
-                weight = 6;
+                weight = 4.5;
               } else {
                 // Secondary background network when focusing a line
-                opacity = 0.08;
-                weight = 1.5;
+                opacity = 0.05;
+                weight = 1.2;
               }
             } else {
               // Rule 1: Initial state - colorful ambient network lines
               if (isPrimary) {
-                opacity = 0.50;
-                weight = 4;
+                opacity = 0.55;
+                weight = 3.5;
               } else {
                 opacity = 0.25;
-                weight = 2.5;
+                weight = 2;
               }
             }
 
             return (
               <Fragment key={`shape-group-${shape.shape_id || Math.random()}`}>
-                {/* Neon glow shadow under selected lines */}
+                {/* 1. Inner intense glow core (only for selected lines) */}
                 {isLineSelected && (
                   <Polyline
                     positions={shape.coordinates}
                     interactive={false}
                     pathOptions={{
                       color: getLineColor(shape.route_id),
-                      weight: 14,
-                      opacity: 0.15,
+                      weight: 7,
+                      opacity: 0.28,
                       lineCap: "round",
                       lineJoin: "round",
                     }}
                   />
                 )}
+
+                {/* 3. The main solid path */}
                 <Polyline
                   positions={shape.coordinates}
                   interactive={true}
@@ -1612,6 +1666,22 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                     lineJoin: "round",
                   }}
                 />
+
+                {/* 4. Futuristic dynamic overlay (dashed trace running down the center of selected line) */}
+                {isLineSelected && (
+                  <Polyline
+                    positions={shape.coordinates}
+                    interactive={false}
+                    pathOptions={{
+                      color: "#ffffff",
+                      weight: 1.5,
+                      opacity: 0.75,
+                      dashArray: "6, 14",
+                      lineCap: "round",
+                      lineJoin: "round",
+                    }}
+                  />
+                )}
               </Fragment>
             );
           })}
@@ -1800,6 +1870,21 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                           </div>
                         </div>
                       </div>
+
+                      {/* Telemetry Row (Live update freshness) */}
+                      {selectedBus.timestamp && (
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap text-[8.5px] md:text-[9.5px] text-slate-400 font-extrabold uppercase tracking-wide">
+                          <span className="flex items-center gap-1.5 bg-slate-900/60 border border-white/5 px-2 py-0.5 rounded-lg text-slate-400 font-bold normal-case shadow-sm">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            Actualisé {(() => {
+                              const ageSec = Math.floor(Date.now() / 1000) - selectedBus.timestamp;
+                              if (ageSec < 5) return "à l'instant";
+                              if (ageSec < 60) return `il y a ${ageSec}s`;
+                              return `il y a ${Math.floor(ageSec / 60)}m`;
+                            })()}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
 

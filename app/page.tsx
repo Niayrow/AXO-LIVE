@@ -13,9 +13,10 @@ import {
   Bus,
   X,
   Calendar,
+  Search,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { LINE_COLORS } from "@/components/lineColors";
+import { LINE_COLORS, getLineColor } from "@/components/lineColors";
 
 const formatAlertDateRange = (start?: string, end?: string) => {
   if (!start && !end) return "";
@@ -41,6 +42,8 @@ const formatAlertDateRange = (start?: string, end?: string) => {
 
 export default function Home() {
   const [activeAlert, setActiveAlert] = useState<any | null>(null);
+  const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const { data: alertsData } = useQuery({
     queryKey: ["networkAlerts"],
     queryFn: async () => {
@@ -63,6 +66,14 @@ export default function Home() {
 
   const alertCount = alertsData?.alerts?.length || 0;
   const busCount = realtimeData?.vehicles?.length || 0;
+
+  const filteredVehicles = searchQuery.trim()
+    ? (realtimeData?.vehicles || []).filter((v: any) => {
+        const cleanQuery = searchQuery.toLowerCase().replace("rcr", "").trim();
+        const cleanVehicleId = (v.vehicle_id || "").toLowerCase().replace("rcr", "").trim();
+        return cleanVehicleId.includes(cleanQuery);
+      })
+    : [];
 
   const navItems = [
     {
@@ -104,16 +115,27 @@ export default function Home() {
       <div className="relative z-10 w-full max-w-sm flex flex-col items-center pt-4">
 
         {/* Logo / Brand */}
-        <div className="mb-10 text-center mt-4">
-          <h1 className="text-4xl font-black tracking-tight">
-            <span className="bg-gradient-to-r from-amber-400 to-amber-600 text-transparent bg-clip-text">
-              AXO
-            </span>
-            <span className="text-white"> Live</span>
-          </h1>
-          <p className="text-xs text-slate-500 font-semibold mt-2 tracking-wide">
-            Réseau de bus • Bassin de Creil
-          </p>
+        <div className="mb-10 text-center mt-4 relative w-full flex items-center justify-center">
+          <div className="flex flex-col items-center">
+            <h1 className="text-4xl font-black tracking-tight">
+              <span className="bg-gradient-to-r from-amber-400 to-amber-600 text-transparent bg-clip-text">
+                AXO
+              </span>
+              <span className="text-white"> Live</span>
+            </h1>
+            <p className="text-xs text-slate-500 font-semibold mt-2 tracking-wide">
+              Réseau de bus • Bassin de Creil
+            </p>
+          </div>
+          
+          {/* Subtle Hidden Search Trigger */}
+          <button
+            onClick={() => setIsSearchExpanded(true)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-xl bg-slate-900/40 hover:bg-slate-800/80 border border-white/5 hover:border-white/10 flex items-center justify-center text-slate-500 hover:text-amber-500 transition-all duration-200 active:scale-[0.95] cursor-pointer"
+            title="Rechercher un bus par numéro"
+          >
+            <Search size={15} />
+          </button>
         </div>
 
 
@@ -409,6 +431,168 @@ export default function Home() {
           </div>
         );
       })()}
+
+      {/* Premium Search Modal Overlay (Menu Caché) */}
+      {isSearchExpanded && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
+          {/* Backdrop with intense blur */}
+          <div 
+            className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm cursor-pointer"
+            onClick={() => {
+              setIsSearchExpanded(false);
+              setSearchQuery("");
+            }}
+          />
+
+          {/* Modal Box */}
+          <div 
+            className="relative w-full max-w-sm bg-slate-900 border border-white/10 rounded-3xl p-6 shadow-2xl overflow-hidden z-10 flex flex-col gap-4 animate-scale-up"
+            style={{
+              boxShadow: `0 10px 40px -10px rgba(245,158,11,0.15), 0 0 50px -10px rgba(0,0,0,0.5)`,
+            }}
+          >
+            {/* Decorative side ambient glow */}
+            <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 blur-[60px] rounded-full pointer-events-none" />
+
+            {/* Header: Title and Close button */}
+            <div className="flex justify-between items-center pb-2 border-b border-white/5">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500">
+                  <Bus size={14} />
+                </div>
+                <span className="text-xs font-black uppercase tracking-wider text-slate-300">
+                  Suivi de bus par numéro
+                </span>
+              </div>
+              
+              <button 
+                onClick={() => {
+                  setIsSearchExpanded(false);
+                  setSearchQuery("");
+                }}
+                className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all flex items-center justify-center border border-white/5 active:scale-95"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Input */}
+            <div className="relative flex items-center">
+              <Search size={14} className="absolute left-3.5 text-slate-500" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Numéro du bus (ex: 4031, 57...)"
+                className="w-full pl-10 pr-10 py-3 bg-slate-950/80 border border-white/5 focus:border-amber-500/50 rounded-xl text-xs font-bold text-white placeholder-slate-500 outline-none transition-colors"
+                autoFocus
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3 w-5 h-5 flex items-center justify-center rounded-full bg-white/5 text-slate-400 hover:text-white transition-colors"
+                >
+                  <X size={10} />
+                </button>
+              )}
+            </div>
+
+            {/* List */}
+            <div className="flex flex-col gap-2 max-h-[240px] overflow-y-auto pr-1 no-scrollbar select-none">
+              {filteredVehicles.length > 0 ? (
+                filteredVehicles.map((vehicle: any) => {
+                  const cleanName = (vehicle.vehicle_id || "").replace("RCR", "");
+                  const lineColor = getLineColor(vehicle.route_id);
+                  return (
+                    <Link
+                      key={vehicle.id}
+                      href={`/map?bus=${encodeURIComponent(vehicle.id)}`}
+                      className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-950/40 hover:bg-slate-800/60 active:scale-[0.98] border border-white/5 hover:border-white/10 transition-all text-left"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        {/* Line badge */}
+                        <div
+                          className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs border shrink-0"
+                          style={{
+                            backgroundColor: `${lineColor}20`,
+                            color: lineColor,
+                            borderColor: `${lineColor}40`,
+                          }}
+                        >
+                          {vehicle.route_id}
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-xs font-black text-white">
+                            Bus {cleanName}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-medium truncate">
+                            Dir. {vehicle.trip_headsign || "Sans voyageurs"}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="relative flex h-2 w-2 shrink-0">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                        </span>
+                        <ArrowRight size={12} className="text-slate-500" />
+                      </div>
+                    </Link>
+                  );
+                })
+              ) : searchQuery.trim() ? (
+                <div className="text-[10px] text-slate-500 text-center py-6 font-black uppercase tracking-wider">
+                  Aucun bus trouvé pour "{searchQuery}"
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <div className="text-[9px] font-black text-slate-500 uppercase tracking-widest px-1 mb-1">
+                    Suggestions en circulation
+                  </div>
+                  {(realtimeData?.vehicles || []).slice(0, 4).map((vehicle: any) => {
+                    const cleanName = (vehicle.vehicle_id || "").replace("RCR", "");
+                    const lineColor = getLineColor(vehicle.route_id);
+                    return (
+                      <Link
+                        key={vehicle.id}
+                        href={`/map?bus=${encodeURIComponent(vehicle.id)}`}
+                        className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-950/20 hover:bg-slate-800/40 border border-white/5 transition-all text-left"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div
+                            className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs border shrink-0"
+                            style={{
+                              backgroundColor: `${lineColor}20`,
+                              color: lineColor,
+                              borderColor: `${lineColor}40`,
+                            }}
+                          >
+                            {vehicle.route_id}
+                          </div>
+                          <div className="flex flex-col min-w-0">
+                            <span className="text-xs font-black text-white">
+                              Bus {cleanName}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-medium truncate">
+                              Dir. {vehicle.trip_headsign || "Sans voyageurs"}
+                            </span>
+                          </div>
+                        </div>
+                        <ArrowRight size={12} className="text-slate-500" />
+                      </Link>
+                    );
+                  })}
+                  {(!realtimeData?.vehicles || realtimeData.vehicles.length === 0) && (
+                    <div className="text-[10px] text-slate-500 text-center py-4 font-black uppercase tracking-wider">
+                      Aucun bus en circulation
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
