@@ -5,16 +5,13 @@ import { MapContainer, TileLayer, Marker, Tooltip, Polyline, useMapEvents, useMa
 import { useQuery } from "@tanstack/react-query";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { Clock, Info, X, MapPin, Bus, SlidersHorizontal, ChevronDown, Search, Locate, AlertCircle, Edit3 } from "lucide-react";
+import { X, MapPin, Bus, SlidersHorizontal, Search, Locate, AlertCircle } from "lucide-react";
 import { LINE_COLORS, getLineColor } from "./lineColors";
-
-// Fix Leaflet's default icon paths in Next.js
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
-  iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
-  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
-});
+import { MAP_STYLES } from "./mapConfig";
+import { useFuzzySearch } from "./hooks/useFuzzySearch";
+import { useGpsLocation } from "./hooks/useGpsLocation";
+import BusPanelDetail from "./subcomponents/BusPanelDetail";
+import StopPanelDetail from "./subcomponents/StopPanelDetail";
 
 export interface Vehicle {
   id: string;
@@ -56,8 +53,6 @@ const getVehicleType = (vehicleId: string) => {
   const articulatedIds = ["53", "57", "58", "65", "66", "67", "68"];
   return articulatedIds.includes(cleanId) ? "Articulé" : "Standard";
 };
-
-// LINE_COLORS and getLineColor are now imported from ./lineColors
 
 // Custom DivIcon logic for buses (sleek, compact & modern)
 // Enhanced with rotating neon conic-gradient glow wrapper when selected/focused
@@ -340,103 +335,6 @@ const createStopIcon = (
   });
 };
 
-// --- HIGHLY INTELLIGENT FUZZY SEARCH HELPERS (Accent Insensitive & Typo Tolerant) ---
-
-// Calculates the basic editing distance between two strings
-const getLevenshteinDistance = (a: string, b: string): number => {
-  const matrix: number[][] = [];
-  for (let i = 0; i <= b.length; i++) {
-    matrix[i] = [i];
-  }
-  for (let j = 0; j <= a.length; j++) {
-    matrix[0][j] = j;
-  }
-  for (let i = 1; i <= b.length; i++) {
-    for (let j = 1; j <= a.length; j++) {
-      if (b.charAt(i - 1) === a.charAt(j - 1)) {
-        matrix[i][j] = matrix[i - 1][j - 1];
-      } else {
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j - 1] + 1, // substitution
-          matrix[i][j - 1] + 1,     // insertion
-          matrix[i - 1][j] + 1      // deletion
-        );
-      }
-    }
-  }
-  return matrix[b.length][a.length];
-};
-
-// Computes a fuzzy matching strength (0-100) between the stop name and query string
-const getFuzzyMatchScore = (stopName: string, query: string): number => {
-  // Convert to lowercase and strip all French accents/diacritics
-  const cleanStop = stopName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  const cleanQuery = query.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-
-  // 1. Perfect substring match (highest priority score)
-  if (cleanStop.includes(cleanQuery)) {
-    return 100 - (cleanStop.indexOf(cleanQuery) * 2) - (cleanStop.length - cleanQuery.length);
-  }
-
-  // 2. Word-by-word comparison for spelling mistake tolerance
-  const stopWords = cleanStop.split(/[\s-]+/);
-  const queryWords = cleanQuery.split(/[\s-]+/);
-
-  let totalScore = 0;
-
-  for (const qWord of queryWords) {
-    if (!qWord) continue;
-    let bestWordScore = 0;
-
-    for (const sWord of stopWords) {
-      if (!sWord) continue;
-
-      // Prefix match (e.g. "berth" matches "berthe")
-      if (sWord.startsWith(qWord)) {
-        bestWordScore = Math.max(bestWordScore, 85 - (sWord.length - qWord.length));
-        continue;
-      }
-
-      // Inter-word substring
-      if (sWord.includes(qWord)) {
-        bestWordScore = Math.max(bestWordScore, 70 - (sWord.length - qWord.length));
-        continue;
-      }
-
-      // Levenshtein typo distance tolerance
-      const dist = getLevenshteinDistance(sWord, qWord);
-      const maxLength = Math.max(sWord.length, qWord.length);
-
-      // Max allowed errors: 2 for long words (>4), 1 for medium (>2), 0 for short
-      const maxAllowedDist = qWord.length > 4 ? 2 : qWord.length > 2 ? 1 : 0;
-
-      if (dist <= maxAllowedDist) {
-        const similarity = 1 - dist / maxLength;
-        bestWordScore = Math.max(bestWordScore, Math.round(similarity * 60));
-      }
-    }
-    totalScore += bestWordScore;
-  }
-
-  return totalScore / queryWords.length;
-};
-
-// Distance calculation using Haversine formula (meters)
-const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-  const R = 6371e3; // meters
-  const φ1 = (lat1 * Math.PI) / 180;
-  const φ2 = (lat2 * Math.PI) / 180;
-  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
-
-  const a =
-    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return R * c; // meters
-};
-
 // Custom User Marker Icon (Blue pulsing dot)
 const createUserIcon = () => {
   if (typeof window === "undefined") return null as any;
@@ -504,7 +402,7 @@ function MapFocusController({
       const focusKey = `bus-${selectedBus.id}`;
       if (lastFocusedIdRef.current !== focusKey) {
         lastFocusedIdRef.current = focusKey;
-        
+
         // Use a small timeout to ensure map container has adjusted and is fully ready
         const timer = setTimeout(() => {
           map.flyTo(
@@ -547,10 +445,10 @@ function MapFocusController({
       lastFocusedStopIdRef.current = null;
     }
   }, [
-    selectedBus?.id, 
-    selectedBus?.position?.lat, 
+    selectedBus?.id,
+    selectedBus?.position?.lat,
     selectedBus?.position?.lon,
-    selectedStop?.stop_id, 
+    selectedStop?.stop_id,
     highlightedBus?.id,
     highlightedBus?.position?.lat,
     highlightedBus?.position?.lon,
@@ -570,6 +468,17 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
   const [isInitialModalOpen, setIsInitialModalOpen] = useState(true);
   const [zoomLevel, setZoomLevel] = useState(13);
 
+  // Set of lines with at least one active bus
+  const activeLinesSet = useMemo(() => {
+    const active = new Set<string>();
+    vehicles.forEach(v => {
+      if (v.route_id) {
+        active.add(v.route_id.trim());
+      }
+    });
+    return active;
+  }, [vehicles]);
+
   const [showBuses, setShowBuses] = useState(true);
   const [showShapes, setShowShapes] = useState(true);
   const [showStops, setShowStops] = useState(true);
@@ -577,10 +486,17 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
   const [isOthersOpen, setIsOthersOpen] = useState(false);
 
   const [map, setMap] = useState<L.Map | null>(null);
-  const [userCoords, setUserCoords] = useState<{ lat: number; lon: number } | null>(null);
-  const [isLocating, setIsLocating] = useState(false);
-  const [nearestStopBanner, setNearestStopBanner] = useState<string | null>(null);
-  const [gpsWarning, setGpsWarning] = useState<string | null>(null);
+
+  // Integrate Location Custom Hook
+  const {
+    isLocating,
+    userCoords,
+    gpsWarning,
+    nearestStopBanner,
+    handleLocateUser,
+    getDistance
+  } = useGpsLocation();
+
   // Fetch real-time traffic alerts from OiseMob server
   const { data: alertsData } = useQuery({
     queryKey: ["networkAlerts"],
@@ -640,29 +556,27 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
   const selectedBus = vehicles.find(v => v.id === selectedBusId) || null;
   const highlightedBus = vehicles.find(v => v.id === highlightedBusId) || null;
 
-  // Measure direction text overflow for marquee effect (initialized after selectedBus derivation)
-  const directionRef = useRef<HTMLDivElement>(null);
-  const [scrollDistance, setScrollDistance] = useState(0);
+  // Measure live alerts scroll width to set a constant speed (preventing speed-up on long content)
+  const marqueeRef = useRef<HTMLDivElement>(null);
+  const [marqueeDuration, setMarqueeDuration] = useState(32);
+
+  // Automatically dismiss suggestion banner when user interacts and selects anything
+  useEffect(() => {
+    if (selectedLineId || selectedBusId || selectedStopId) {
+      setIsInitialModalOpen(false);
+    }
+  }, [selectedLineId, selectedBusId, selectedStopId]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (directionRef.current) {
-        const container = directionRef.current.parentElement;
-        if (container) {
-          const diff = directionRef.current.scrollWidth - container.clientWidth;
-          if (diff > 0) {
-            setScrollDistance(diff + 12); // safety padding
-          } else {
-            setScrollDistance(0);
-          }
-        }
-      } else {
-        setScrollDistance(0);
+      if (marqueeRef.current) {
+        const width = marqueeRef.current.scrollWidth;
+        const calculatedDuration = Math.max(15, Math.round(width / 50));
+        setMarqueeDuration(calculatedDuration);
       }
-    }, 100);
-
+    }, 150);
     return () => clearTimeout(timer);
-  }, [selectedBus?.trip_headsign, selectedBusId]);
+  }, [scrollingAlertContent]);
 
   // Check URL query parameters on mount to focus a specific bus (deep linking)
   useEffect(() => {
@@ -692,14 +606,12 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
     const coordsCount: Record<string, number> = {};
     const coordsIndex: Record<string, number> = {};
 
-    // 1st pass: Count buses at approximate coordinate locations (4 decimal places ~ 11 meters)
     filteredVehicles.forEach((v) => {
       if (!v.position?.lat || !v.position?.lon) return;
       const key = `${v.position.lat.toFixed(4)}_${v.position.lon.toFixed(4)}`;
       coordsCount[key] = (coordsCount[key] || 0) + 1;
     });
 
-    // 2nd pass: Shift overlapping markers in a neat circle
     return filteredVehicles.map((v) => {
       if (!v.position?.lat || !v.position?.lon) return null;
       const key = `${v.position.lat.toFixed(4)}_${v.position.lon.toFixed(4)}`;
@@ -709,8 +621,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
         const index = coordsIndex[key] || 0;
         coordsIndex[key] = index + 1;
 
-        // Spread radius in degrees (~15 meters)
-        const radius = 0.00018; 
+        const radius = 0.00018;
         const angle = (2 * Math.PI * index) / count;
 
         return {
@@ -738,65 +649,8 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
     staleTime: Infinity,
   });
 
-  const handleLocateUser = () => {
-    if (!navigator.geolocation) {
-      alert("La géolocalisation n'est pas supportée par votre navigateur.");
-      return;
-    }
-    
-    setIsLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setIsLocating(false);
-        const { latitude: lat, longitude: lon } = position.coords;
-        setUserCoords({ lat, lon });
-        
-        // Find nearest stop
-        if (allStopsData?.stops && allStopsData.stops.length > 0) {
-          let closestStop: any = null;
-          let minDistance = Infinity;
-          
-          allStopsData.stops.forEach((stop: any) => {
-            if (!stop.stop_lat || !stop.stop_lon) return;
-            const dist = getDistance(lat, lon, stop.stop_lat, stop.stop_lon);
-            if (dist < minDistance) {
-              minDistance = dist;
-              closestStop = stop;
-            }
-          });
-          
-          if (closestStop) {
-            // Check if too far (more than 20km)
-            if (minDistance > 20000) {
-              setGpsWarning("Position hors réseau AXO ou GPS imprécis (plus de 20 km)");
-              setTimeout(() => {
-                setGpsWarning(null);
-              }, 6000);
-              return;
-            }
-
-            if (map) {
-              map.flyTo([lat, lon], 17, { animate: true, duration: 1.5 });
-            }
-
-            setSelectedStopId(closestStop.stop_id);
-            setSelectedBusId(null);
-            
-            // Show a temporary banner with nearest stop
-            setNearestStopBanner(closestStop.stop_name);
-            setTimeout(() => {
-              setNearestStopBanner(null);
-            }, 6000);
-          }
-        }
-      },
-      (error) => {
-        setIsLocating(false);
-        console.error("Error getting location: ", error);
-        alert("Impossible d'obtenir votre position. Veuillez vérifier vos autorisations GPS.");
-      },
-      { enableHighAccuracy: true }
-    );
+  const triggerLocateUser = () => {
+    handleLocateUser(map, allStopsData?.stops, setSelectedStopId, setSelectedBusId);
   };
 
   const selectedStop = allStopsData?.stops?.find((s: any) => s.stop_id === selectedStopId) || null;
@@ -829,7 +683,6 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
   });
 
   // Sort shapes so primary lines A, B, C1, C2, D are rendered last and sit on top of secondary shapes
-  // Also ensures the currently selected/active route is rendered absolute last (highest z-index on top!)
   const sortedShapes = useMemo(() => {
     if (!shapesData?.shapes) return [];
     const primaryList = ["A", "B", "C1", "C2", "D"];
@@ -840,7 +693,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
         if (a.route_id === activeRouteId && b.route_id !== activeRouteId) return 1;
         if (a.route_id !== activeRouteId && b.route_id === activeRouteId) return -1;
       }
-      
+
       const aIsPrimary = primaryList.includes(a.route_id);
       const bIsPrimary = primaryList.includes(b.route_id);
       if (aIsPrimary && !bIsPrimary) return 1;
@@ -850,22 +703,19 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
   }, [shapesData, selectedLineId, selectedBus?.route_id, highlightedBus?.route_id]);
 
   // Filter stops to show dynamically based on selections and zoom breaks
-  // Intermediate ordinary stops are hidden at lower zooms to prevent spaghettis clutter, while major hubs stay visible!
   const stopsToShow = useMemo(() => {
     if (!showStops) return selectedStop ? [selectedStop] : [];
-    
+
     const activeRouteId = selectedLineId || selectedBus?.route_id || highlightedBus?.route_id;
     let stops = allStopsData?.stops || [];
-    
+
     if (activeRouteId) {
       stops = stops.filter((s: any) => s.lines?.includes(activeRouteId));
     } else {
-      // Global view (no active line filter)
-      // At zoom < 14: show only major terminus/stations to avoid visual clutter
       if (zoomLevel < 14) {
-        stops = stops.filter((s: any) => 
+        stops = stops.filter((s: any) =>
           s.stop_id === selectedStopId ||
-          (s.lines && s.lines.length >= 3) || 
+          (s.lines && s.lines.length >= 3) ||
           /Gare|Mairie|Lycée|Collège/i.test(s.stop_name || "")
         );
       }
@@ -873,107 +723,14 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
     return stops;
   }, [showStops, selectedStop, selectedBus, highlightedBus, selectedLineId, allStopsData, zoomLevel, selectedStopId]);
 
-  // Filtered stops based on textual search query with fuzzy matching and accent insensitivity
-  const filteredStops = useMemo(() => {
-    if (!searchQuery.trim() || !allStopsData?.stops) return [];
-    
-    return allStopsData.stops
-      .map((stop: any) => {
-        const score = getFuzzyMatchScore(stop.stop_name || "", searchQuery);
-        return { stop, score };
-      })
-      .filter((item: any) => item.score > 25)
-      .sort((a: any, b: any) => b.score - a.score)
-      .map((item: any) => item.stop)
-      .slice(0, 8); // Premium compact view limit
-  }, [searchQuery, allStopsData]);
+  // Fuzzy search results using custom hook
+  const filteredStops = useFuzzySearch(allStopsData?.stops, searchQuery);
 
-  // Calculate upcoming buses for the selected stop
-  const upcomingBusesForStop = selectedStop ? filteredVehicles.map(v => {
-    const update = v.stop_time_updates?.find(u => u.stop_id === selectedStop.stop_id);
-    // Only include if bus has an update for this stop and hasn't passed it
-    if (update && v.current_stop_sequence !== undefined && update.stop_sequence >= v.current_stop_sequence) {
-      const arrivalTime = update.arrival?.time;
-      if (arrivalTime) {
-        const etaSeconds = arrivalTime - Math.floor(Date.now() / 1000);
-        return {
-          vehicle: v,
-          arrivalTime,
-          etaMinutes: Math.floor(etaSeconds / 60)
-        };
-      }
-    }
-    return null;
-  }).filter(Boolean).sort((a: any, b: any) => a.arrivalTime - b.arrivalTime) : [];
-
-  // Check if selected bus is waiting at the first stop and has not departed yet
-  const departureStatus = useMemo(() => {
-    if (!selectedBus || !staticData?.stops?.length) return null;
-    const firstStop = staticData.stops[0];
-    const currentSeq = selectedBus.current_stop_sequence || 0;
-
-    // Check if the bus is at or before the first stop
-    if (currentSeq <= firstStop.stop_sequence) {
-      const update = selectedBus.stop_time_updates?.find((u) => u.stop_id === firstStop.stop_id);
-      const departureTime = update?.departure?.time || update?.arrival?.time;
-      
-      if (departureTime) {
-        const nowSeconds = Math.floor(Date.now() / 1000);
-        const diffSeconds = departureTime - nowSeconds;
-        
-        if (diffSeconds > 0) {
-          const diffMinutes = Math.max(1, Math.round(diffSeconds / 60));
-          return {
-            minutes: diffMinutes,
-            isWaiting: true
-          };
-        }
-      }
-    }
-    return null;
-  }, [selectedBus, staticData]);
-
-  // Find current stop name if stopped or approaching
-  const currentStopInfo = useMemo(() => {
-    if (!selectedBus || !staticData?.stops?.length) return null;
-    const currentSeq = selectedBus.current_stop_sequence;
-    const stop = staticData.stops.find((s: any) => s.stop_sequence === currentSeq);
-    return {
-      name: stop?.stop_name || null,
-      status: selectedBus.current_status // 0: IN_TRANSIT_TO, 1: STOPPED_AT, 2: INCOMING_AT
-    };
-  }, [selectedBus, staticData]);
-
-  // Bassin de Creil / Montataire
   const center: [number, number] = [49.2583, 2.4764];
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-slate-950">
-      <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes marquee-scroll {
-          0% { transform: translate3d(0, 0, 0); }
-          15% { transform: translate3d(0, 0, 0); }
-          85% { transform: translate3d(var(--scroll-dist, 0px), 0, 0); }
-          100% { transform: translate3d(var(--scroll-dist, 0px), 0, 0); }
-        }
-        .animate-direction-marquee {
-          animation: marquee-scroll 8s ease-in-out infinite alternate;
-        }
-        @keyframes marquee-alert-scroll {
-          0% { transform: translate3d(100%, 0, 0); }
-          100% { transform: translate3d(-100%, 0, 0); }
-        }
-        .animate-marquee-alert {
-          display: inline-flex;
-          align-items: center;
-          gap: 16px;
-          white-space: nowrap;
-          animation: marquee-alert-scroll 32s linear infinite;
-        }
-        .animate-marquee-alert:hover {
-          animation-play-state: paused;
-        }
-      `}} />
+      <style dangerouslySetInnerHTML={{ __html: MAP_STYLES }} />
 
       {/* Top Floating Marquee Alert Banner */}
       {scrollingAlertContent && (
@@ -997,71 +754,79 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
               )}
             </span>
           </div>
-          
-          <div className="flex-1 overflow-hidden relative mx-3 h-full flex items-center">
-            <div className="animate-marquee-alert text-[11px] font-bold text-slate-300">
-              {scrollingAlertContent}
+
+          <div className="flex-1 overflow-hidden relative mx-3 h-full flex items-center marquee-parent">
+            <div className="flex w-max">
+              <div
+                ref={marqueeRef}
+                className="animate-marquee-infinite text-[11px] font-bold text-slate-300 flex items-center gap-4 shrink-0 pr-8"
+                style={{ "--marquee-duration": `${marqueeDuration}s` } as React.CSSProperties}
+              >
+                {scrollingAlertContent}
+              </div>
+              <div
+                className="animate-marquee-infinite text-[11px] font-bold text-slate-300 flex items-center gap-4 shrink-0 pr-8"
+                style={{ "--marquee-duration": `${marqueeDuration}s` } as React.CSSProperties}
+              >
+                {scrollingAlertContent}
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Onboarding Modal asking which line to visualize */}
+      {/* Onboarding Suggestion asking which line to visualize */}
       {isInitialModalOpen && (
-        <div className="fixed inset-0 z-[9999] bg-slate-950/80 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in duration-300">
-          <div className="bg-slate-950/92 border border-white/10 rounded-[32px] p-8 max-w-sm w-full shadow-[0_25px_60px_rgba(0,0,0,0.75)] flex flex-col gap-6 text-center backdrop-blur-3xl relative overflow-hidden">
-            {/* Ambient background glow */}
-            <div className="absolute -top-12 -left-12 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-            <div className="absolute -bottom-12 -right-12 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-
-            <div className="flex flex-col items-center gap-2">
-              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 mb-2">
-                <Bus size={24} className="animate-pulse" />
-              </div>
-              <h3 className="text-xl font-black text-white tracking-wide">
-                Réseau AXO Live
-              </h3>
-              <p className="text-xs font-medium text-slate-400 max-w-[260px] leading-relaxed">
-                Quelle ligne de bus souhaitez-vous visualiser en temps réel sur la carte ?
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              {Object.keys(LINE_COLORS).map((line) => {
-                const lineColor = LINE_COLORS[line];
-                return (
-                  <button
-                    key={line}
-                    onClick={() => {
-                      setSelectedLineId(line);
-                      setIsInitialModalOpen(false);
-                    }}
-                    className="py-3.5 px-4 rounded-2xl border text-sm font-black uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-2 shadow-sm hover:scale-[1.02] active:scale-[0.98]"
-                    style={{
-                      backgroundColor: `${lineColor}15`,
-                      borderColor: `${lineColor}30`,
-                      color: lineColor,
-                    }}
-                  >
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: lineColor }} />
-                    Ligne {line}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="border-t border-white/5 pt-4">
-              <button
-                onClick={() => {
-                  setSelectedLineId(null);
-                  setIsInitialModalOpen(false);
-                }}
-                className="w-full py-3.5 px-4 rounded-2xl bg-slate-800/60 hover:bg-slate-800 border border-white/5 hover:border-white/10 text-white font-bold text-xs uppercase tracking-widest transition-all duration-300 shadow-inner flex items-center justify-center gap-2"
-              >
-                Toutes les lignes
-              </button>
-            </div>
+        <div
+          className="fixed bottom-24 left-4 right-4 md:left-auto md:right-4 z-[1000] bg-slate-950/85 border border-white/5 rounded-full px-4 py-2 shadow-[0_10px_25px_rgba(0,0,0,0.5)] flex items-center gap-3.5 backdrop-blur-md animate-in slide-in-from-bottom duration-300 md:max-w-max"
+        >
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-500"></span>
+            </span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Suivre une ligne :
+            </span>
           </div>
+
+          <div className="flex items-center gap-1.5">
+            {Object.keys(LINE_COLORS).map((line) => {
+              const lineColor = LINE_COLORS[line];
+              const hasBuses = activeLinesSet.has(line);
+              return (
+                <button
+                  key={line}
+                  onClick={() => {
+                    setSelectedLineId(line);
+                    setIsInitialModalOpen(false);
+                  }}
+                  className={`w-6 h-6 rounded-full border text-[9px] font-black uppercase transition-all duration-200 flex items-center justify-center hover:scale-110 active:scale-95 cursor-pointer shrink-0 ${!hasBuses ? "opacity-30" : ""
+                    }`}
+                  style={{
+                    backgroundColor: hasBuses ? `${lineColor}20` : "rgba(30, 41, 59, 0.1)",
+                    borderColor: hasBuses ? `${lineColor}40` : "rgba(255, 255, 255, 0.03)",
+                    color: hasBuses ? lineColor : "#64748b",
+                  }}
+                  title={line}
+                >
+                  {line}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="h-3.5 w-[1px] bg-white/10 shrink-0" />
+
+          <button
+            onClick={() => {
+              setIsInitialModalOpen(false);
+            }}
+            className="text-slate-500 hover:text-white transition-colors cursor-pointer shrink-0"
+            title="Fermer"
+          >
+            <X size={12} />
+          </button>
         </div>
       )}
 
@@ -1086,20 +851,20 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
               setSelectedStopId(null);
               setIsOthersOpen(false);
             }}
-            className={`w-8 h-8 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all duration-300 border flex items-center justify-center hover:scale-105 active:scale-95 ${
-              !selectedLineId
+            className={`w-8 h-8 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all duration-300 border flex items-center justify-center hover:scale-105 active:scale-95 ${!selectedLineId
                 ? "bg-amber-500 border-amber-400 text-slate-950 shadow-[0_0_10px_rgba(245,158,11,0.3)]"
                 : "bg-slate-950/65 border-white/5 text-slate-400 hover:text-white"
-            }`}
+              }`}
             title="Toutes les lignes"
           >
             ALL
           </button>
-          
+
           {/* Primary network lines */}
           {["A", "B", "C1", "C2", "D"].map((line) => {
             const lineColor = LINE_COLORS[line];
             const isActive = selectedLineId === line;
+            const hasBuses = activeLinesSet.has(line);
             return (
               <button
                 key={line}
@@ -1109,14 +874,15 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                   setSelectedStopId(null);
                   setIsOthersOpen(false);
                 }}
-                className="w-8 h-8 rounded-xl text-[10.5px] font-black uppercase transition-all duration-300 border flex items-center justify-center shrink-0 hover:scale-105 active:scale-95 hover:brightness-110"
+                className={`w-8 h-8 rounded-xl text-[10.5px] font-black uppercase transition-all duration-300 border flex items-center justify-center shrink-0 hover:scale-105 active:scale-95 hover:brightness-110 ${!isActive && !hasBuses ? "opacity-35" : ""
+                  }`}
                 style={{
                   backgroundColor: isActive ? `${lineColor}33` : "rgba(2, 6, 23, 0.65)",
                   borderColor: isActive ? lineColor : "rgba(255, 255, 255, 0.05)",
-                  color: isActive ? "#ffffff" : lineColor,
+                  color: isActive ? "#ffffff" : (hasBuses ? lineColor : "#64748b"),
                   boxShadow: isActive ? `0 0 10px ${lineColor}40` : "none",
                 }}
-                title={`Ligne ${line}`}
+                title={`Ligne ${line} ${!hasBuses ? "(aucun bus en circulation)" : ""}`}
               >
                 {line}
               </button>
@@ -1148,11 +914,10 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
           {/* + Autres sub-menu button toggle */}
           <button
             onClick={() => setIsOthersOpen(!isOthersOpen)}
-            className={`w-8 h-8 rounded-xl text-[11px] font-black uppercase transition-all duration-300 border flex items-center justify-center shrink-0 hover:scale-105 active:scale-95 ${
-              isOthersOpen
+            className={`w-8 h-8 rounded-xl text-[11px] font-black uppercase transition-all duration-300 border flex items-center justify-center shrink-0 hover:scale-105 active:scale-95 ${isOthersOpen
                 ? "bg-amber-500 border-amber-400 text-slate-950 shadow-[0_0_10px_rgba(245,158,11,0.3)]"
                 : "bg-slate-950/65 border-white/5 text-slate-400 hover:text-white"
-            }`}
+              }`}
             title="Autres lignes"
           >
             +
@@ -1180,6 +945,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
               {["E", "EXAL", "F", "S1", "S2", "S3", "S5", "S6", "S7"].map((line) => {
                 const lineColor = LINE_COLORS[line];
                 const isActive = selectedLineId === line;
+                const hasBuses = activeLinesSet.has(line);
                 return (
                   <button
                     key={line}
@@ -1189,15 +955,17 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                       setSelectedStopId(null);
                       setIsOthersOpen(false); // Close submenu automatically
                     }}
-                    className="py-2.5 px-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-1 shadow-sm hover:scale-[1.02] active:scale-[0.98]"
+                    className={`py-2.5 px-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-1 shadow-sm hover:scale-[1.02] active:scale-[0.98] cursor-pointer ${!isActive && !hasBuses ? "opacity-35" : ""
+                      }`}
                     style={{
                       backgroundColor: isActive ? `${lineColor}33` : "rgba(2, 6, 23, 0.65)",
                       borderColor: isActive ? lineColor : "rgba(255, 255, 255, 0.05)",
-                      color: isActive ? "#ffffff" : lineColor,
+                      color: isActive ? "#ffffff" : (hasBuses ? lineColor : "#64748b"),
                       boxShadow: isActive ? `0 0 10px ${lineColor}30` : "none",
                     }}
+                    title={`Ligne ${line} ${!hasBuses ? "(aucun bus en circulation)" : ""}`}
                   >
-                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: lineColor }} />
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: hasBuses ? lineColor : "#64748b" }} />
                     {line}
                   </button>
                 );
@@ -1235,13 +1003,12 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
 
           {/* Geolocation Button */}
           <button
-            onClick={handleLocateUser}
+            onClick={triggerLocateUser}
             disabled={isLocating}
-            className={`flex items-center justify-center w-10 h-10 rounded-2xl border shadow-lg backdrop-blur-3xl transition-all duration-300 hover:scale-105 active:scale-95 ${
-              userCoords
+            className={`flex items-center justify-center w-10 h-10 rounded-2xl border shadow-lg backdrop-blur-3xl transition-all duration-300 hover:scale-105 active:scale-95 ${userCoords
                 ? "bg-sky-500 border-sky-400 text-slate-950 shadow-[0_0_15px_rgba(14,165,233,0.4)]"
                 : "bg-slate-950/92 border-white/10 text-slate-200 hover:bg-slate-900/90 hover:border-white/20"
-            }`}
+              }`}
             title="Me géolocaliser et suggérer un arrêt"
           >
             {isLocating ? (
@@ -1258,8 +1025,8 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
               if (isSearchOpen) setSearchQuery("");
             }}
             className={`flex items-center justify-center w-10 h-10 rounded-2xl border shadow-lg backdrop-blur-3xl transition-all duration-300 hover:scale-105 active:scale-95 ${isSearchOpen
-                ? "bg-cyan-500 border-cyan-400 text-slate-950 shadow-[0_0_15px_rgba(34,211,238,0.4)]"
-                : "bg-slate-950/92 border-white/10 text-slate-200 hover:bg-slate-900/90 hover:border-white/20"
+              ? "bg-cyan-500 border-cyan-400 text-slate-950 shadow-[0_0_15px_rgba(34,211,238,0.4)]"
+              : "bg-slate-950/92 border-white/10 text-slate-200 hover:bg-slate-900/90 hover:border-white/20"
               }`}
             title="Rechercher un arrêt"
           >
@@ -1270,8 +1037,8 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
           <button
             onClick={() => setIsFilterOpen(!isFilterOpen)}
             className={`flex items-center gap-2 px-3.5 py-2.5 h-10 rounded-2xl border text-xs font-bold shadow-lg backdrop-blur-3xl transition-all duration-300 ${isFilterOpen
-                ? "bg-amber-500 border-amber-400 text-slate-950 shadow-[0_0_15px_rgba(245,158,11,0.4)]"
-                : "bg-slate-950/92 border-white/10 text-slate-200 hover:bg-slate-900/90 hover:border-white/20"
+              ? "bg-amber-500 border-amber-400 text-slate-950 shadow-[0_0_15px_rgba(245,158,11,0.4)]"
+              : "bg-slate-950/92 border-white/10 text-slate-200 hover:bg-slate-900/90 hover:border-white/20"
               }`}
           >
             <SlidersHorizontal size={14} className={isFilterOpen ? "animate-pulse" : ""} />
@@ -1322,10 +1089,10 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                     À proximité de vous
                   </span>
                 </div>
-                
+
                 {!userCoords ? (
                   <button
-                    onClick={handleLocateUser}
+                    onClick={triggerLocateUser}
                     className="w-full flex items-center justify-center gap-2 p-3.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500 hover:text-slate-950 border border-cyan-500/20 text-cyan-400 font-bold text-xs uppercase tracking-wider transition-all duration-200 hover:scale-102 active:scale-98"
                   >
                     {isLocating ? (
@@ -1342,9 +1109,9 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                         ...stop,
                         distance: getDistance(userCoords.lat, userCoords.lon, stop.stop_lat, stop.stop_lon)
                       }));
-                      
+
                       const closestStop = [...nearbyWithDistance].sort((a, b) => a.distance - b.distance)[0];
-                      
+
                       if (closestStop && closestStop.distance > 20000) {
                         return (
                           <div className="p-3 text-center bg-red-500/10 border border-red-500/20 rounded-xl animate-in fade-in duration-200">
@@ -1357,11 +1124,11 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                           </div>
                         );
                       }
-                      
+
                       const nearby = [...nearbyWithDistance]
                         .sort((a, b) => a.distance - b.distance)
                         .slice(0, 3);
-                      
+
                       return nearby.map((stop: any) => (
                         <button
                           key={stop.stop_id}
@@ -1380,8 +1147,8 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                               <span>Lignes : {stop.lines?.join(", ") || "Aucune"}</span>
                               <span className="w-1 h-1 rounded-full bg-slate-700" />
                               <span className="text-cyan-400 font-bold font-sans">
-                                {stop.distance < 1000 
-                                  ? `${Math.round(stop.distance)}m` 
+                                {stop.distance < 1000
+                                  ? `${Math.round(stop.distance)}m`
                                   : `${(stop.distance / 1000).toFixed(1)}km`}
                               </span>
                             </span>
@@ -1405,156 +1172,85 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
 
         {/* Dropdown Menu */}
         {isFilterOpen && (
-          <div className="bg-slate-950/92 backdrop-blur-3xl border border-white/10 p-4 rounded-2xl w-60 shadow-2xl flex flex-col gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
-            <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest border-b border-white/5 pb-2 mb-1">
+          <div className="bg-slate-950/92 backdrop-blur-3xl border border-white/10 p-3 rounded-2xl w-60 shadow-2xl flex flex-col gap-1.5 animate-in fade-in slide-in-from-top-2 duration-200">
+            <h4 className="text-[9px] font-black text-slate-500 uppercase tracking-widest border-b border-white/5 pb-2 mb-1 px-2">
               Affichage de la carte
             </h4>
 
             {/* Toggle Buses */}
-            <label className="flex items-center justify-between cursor-pointer group py-1">
-              <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-amber-500" />
+            <button
+              onClick={() => setShowBuses(!showBuses)}
+              className="flex items-center justify-between w-full group py-2 px-2 rounded-xl hover:bg-white/5 active:scale-[0.98] transition-all text-left"
+            >
+              <span className="text-xs font-bold text-slate-300 group-hover:text-white transition-colors flex items-center gap-2.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-[0_0_8px_#f59e0b]" />
                 Bus en circulation
               </span>
-              <input
-                type="checkbox"
-                checked={showBuses}
-                onChange={(e) => setShowBuses(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-amber-500 focus:ring-offset-slate-950 cursor-pointer"
-              />
-            </label>
+              <div
+                className={`relative w-[36px] h-[20px] rounded-full transition-all duration-300 shrink-0 ${showBuses
+                    ? "bg-amber-500/20 border border-amber-500/50 shadow-[0_0_8px_rgba(245,158,11,0.25)]"
+                    : "bg-slate-950/80 border border-white/10"
+                  }`}
+              >
+                <div
+                  className={`absolute top-[3px] left-[3px] w-[14px] h-[14px] rounded-full transition-all duration-300 ${showBuses
+                      ? "translate-x-[16px] bg-amber-500 shadow-[0_0_6px_#f59e0b]"
+                      : "translate-x-0 bg-slate-500"
+                    }`}
+                />
+              </div>
+            </button>
 
             {/* Toggle Shapes */}
-            <label className="flex items-center justify-between cursor-pointer group py-1">
-              <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            <button
+              onClick={() => setShowShapes(!showShapes)}
+              className="flex items-center justify-between w-full group py-2 px-2 rounded-xl hover:bg-white/5 active:scale-[0.98] transition-all text-left"
+            >
+              <span className="text-xs font-bold text-slate-300 group-hover:text-white transition-colors flex items-center gap-2.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]" />
                 Tracés des lignes
               </span>
-              <input
-                type="checkbox"
-                checked={showShapes}
-                onChange={(e) => setShowShapes(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-amber-500 focus:ring-offset-slate-950 cursor-pointer"
-              />
-            </label>
+              <div
+                className={`relative w-[36px] h-[20px] rounded-full transition-all duration-300 shrink-0 ${showShapes
+                    ? "bg-emerald-500/20 border border-emerald-500/50 shadow-[0_0_8px_rgba(52,211,153,0.25)]"
+                    : "bg-slate-950/80 border border-white/10"
+                  }`}
+              >
+                <div
+                  className={`absolute top-[3px] left-[3px] w-[14px] h-[14px] rounded-full transition-all duration-300 ${showShapes
+                      ? "translate-x-[16px] bg-emerald-400 shadow-[0_0_6px_#34d399]"
+                      : "translate-x-0 bg-slate-500"
+                    }`}
+                />
+              </div>
+            </button>
 
             {/* Toggle Stops */}
-            <label className="flex items-center justify-between cursor-pointer group py-1">
-              <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-purple-400" />
+            <button
+              onClick={() => setShowStops(!showStops)}
+              className="flex items-center justify-between w-full group py-2 px-2 rounded-xl hover:bg-white/5 active:scale-[0.98] transition-all text-left"
+            >
+              <span className="text-xs font-bold text-slate-300 group-hover:text-white transition-colors flex items-center gap-2.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-purple-400 shadow-[0_0_8px_#c084fc]" />
                 Points d'arrêts
               </span>
-              <input
-                type="checkbox"
-                checked={showStops}
-                onChange={(e) => setShowStops(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-amber-500 focus:ring-offset-slate-950 cursor-pointer"
-              />
-            </label>
+              <div
+                className={`relative w-[36px] h-[20px] rounded-full transition-all duration-300 shrink-0 ${showStops
+                    ? "bg-purple-500/20 border border-purple-500/50 shadow-[0_0_8px_rgba(192,132,252,0.25)]"
+                    : "bg-slate-950/80 border border-white/10"
+                  }`}
+              >
+                <div
+                  className={`absolute top-[3px] left-[3px] w-[14px] h-[14px] rounded-full transition-all duration-300 ${showStops
+                      ? "translate-x-[16px] bg-purple-400 shadow-[0_0_6px_#c084fc]"
+                      : "translate-x-0 bg-slate-500"
+                    }`}
+                />
+              </div>
+            </button>
           </div>
         )}
       </div>
-
-      {/* Dynamic CSS override for Leaflet tooltips (Professional Map Labels with Halo) */}
-      <style dangerouslySetInnerHTML={{
-        __html: `
-        /* Neon animation keyframes for selected bus marker */
-        @keyframes rotate-neon {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-        @keyframes pulse-neon {
-          0%, 100% { transform: scale(1); filter: drop-shadow(0 0 5px #ff007f) drop-shadow(0 0 10px #00f0ff); }
-          50% { transform: scale(1.1); filter: drop-shadow(0 0 10px #00ff66) drop-shadow(0 0 18px #ff007f); }
-        }
-
-        /* Bus stop custom marker: remove Leaflet's default wrapper styling */
-        .custom-stop-marker {
-          background: transparent !important;
-          border: none !important;
-        }
-
-        /* Ultra-modern glassmorphic, compact stop label */
-        .stop-label-pill {
-          background: rgba(15, 23, 42, 0.85) !important;
-          backdrop-filter: blur(6px) !important;
-          border: 1.2px solid rgba(255, 255, 255, 0.15) !important;
-          border-radius: 8px !important;
-          box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6) !important;
-          color: #cbd5e1 !important;
-          font-size: 10.5px !important;
-          font-weight: 700 !important;
-          font-family: system-ui, -apple-system, sans-serif !important;
-          letter-spacing: 0.02em !important;
-          padding: 3px 7.5px !important;
-          white-space: nowrap !important;
-          pointer-events: auto !important;
-          cursor: pointer !important;
-          transition: opacity 0.2s ease-in-out, background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out, box-shadow 0.2s ease-in-out !important;
-        }
-        .stop-label-pill::before {
-          display: none !important;
-        }
-
-        /* Selected stop label: vibrant golden accent, neon border glow */
-        .stop-label-selected {
-          background: rgba(245, 158, 11, 0.2) !important;
-          border: 1.5px solid #f59e0b !important;
-          color: #f59e0b !important;
-          font-size: 12px !important;
-          padding: 4px 10px !important;
-          box-shadow: 0 0 12px rgba(245, 158, 11, 0.4), 0 4px 16px rgba(0, 0, 0, 0.7) !important;
-          font-weight: 850 !important;
-        }
-
-        /* Legacy transparent halo labels (used when zoomed out and many labels visible) */
-        .stop-tooltip-clean {
-          background: transparent !important;
-          border: none !important;
-          box-shadow: none !important;
-          color: #f8fafc !important;
-          font-size: 11px !important;
-          font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
-          font-weight: 700 !important;
-          letter-spacing: 0.01em !important;
-          padding: 0 !important;
-          margin-top: 4px !important;
-          cursor: pointer !important;
-          text-shadow: 
-            -1.5px -1.5px 0 #020617,  
-             1.5px -1.5px 0 #020617,
-            -1.5px  1.5px 0 #020617,
-             1.5px  1.5px 0 #020617,
-             0px 4px 10px rgba(0,0,0,0.9) !important;
-          pointer-events: auto !important;
-          cursor: pointer !important;
-          transition: color 0.2s ease-in-out;
-        }
-        .stop-tooltip-clean::before {
-          display: none !important;
-        }
-        .stop-tooltip-selected {
-          color: #22d3ee !important;
-        }
-
-        /* Force buses (markers) to render ABOVE stop names (tooltips) */
-        .leaflet-marker-pane {
-          z-index: 700 !important;
-        }
-        .leaflet-tooltip-pane {
-          z-index: 600 !important;
-        }
-
-        /* Prevent white background flash when zooming or panning map tiles */
-        .leaflet-container {
-          background-color: #090909 !important;
-        }
-
-        /* Add subtle warm color tint to the dark map tiles */
-        .leaflet-tile-pane {
-          filter: saturate(1.6) brightness(1.05) hue-rotate(5deg) !important;
-        }
-      `}} />
 
       {/* Map layer */}
       <div className="absolute inset-0 z-0">
@@ -1572,6 +1268,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
               setSelectedBusId(null);
               setSelectedStopId(null);
               setHighlightedBusId(null);
+              setIsInitialModalOpen(false);
             }}
           />
 
@@ -1598,55 +1295,55 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
 
           {/* Network Polylines (Shapes) */}
           {showShapes && sortedShapes?.map((shape: any) => {
-            // Determine if this line should be highlighted
             const activeRouteId = selectedLineId || selectedBus?.route_id || highlightedBus?.route_id;
             const hasActiveFilter = !!activeRouteId;
             const isLineSelected = activeRouteId === shape.route_id;
+            const hasBuses = activeLinesSet.has(shape.route_id);
 
             const isPrimary = ["A", "B", "C1", "C2", "D"].includes(shape.route_id);
 
-            // Dynamic opacity and weight styling based on active filter and line priority
             let opacity = 0.35;
             let weight = 2.5;
+            let color = getLineColor(shape.route_id);
 
             if (hasActiveFilter) {
               if (isLineSelected) {
-                opacity = 1.0;
-                weight = 4.5;
+                opacity = hasBuses ? 1.0 : 0.6;
+                weight = hasBuses ? 4.5 : 3.5;
+                color = hasBuses ? getLineColor(shape.route_id) : "#64748b";
               } else {
-                // Secondary background network when focusing a line
                 opacity = 0.05;
                 weight = 1.2;
+                color = hasBuses ? getLineColor(shape.route_id) : "#475569";
               }
             } else {
-              // Rule 1: Initial state - colorful ambient network lines
               if (isPrimary) {
-                opacity = 0.55;
-                weight = 3.5;
+                opacity = hasBuses ? 0.55 : 0.25;
+                weight = hasBuses ? 3.5 : 2.5;
+                color = hasBuses ? getLineColor(shape.route_id) : "#475569";
               } else {
-                opacity = 0.25;
-                weight = 2;
+                opacity = hasBuses ? 0.25 : 0.12;
+                weight = hasBuses ? 2 : 1.5;
+                color = hasBuses ? getLineColor(shape.route_id) : "#334155";
               }
             }
 
             return (
               <Fragment key={`shape-group-${shape.shape_id || Math.random()}`}>
-                {/* 1. Inner intense glow core (only for selected lines) */}
                 {isLineSelected && (
                   <Polyline
                     positions={shape.coordinates}
                     interactive={false}
                     pathOptions={{
-                      color: getLineColor(shape.route_id),
+                      color: color,
                       weight: 7,
-                      opacity: 0.28,
+                      opacity: hasBuses ? 0.28 : 0.15,
                       lineCap: "round",
                       lineJoin: "round",
                     }}
                   />
                 )}
 
-                {/* 3. The main solid path */}
                 <Polyline
                   positions={shape.coordinates}
                   interactive={true}
@@ -1659,7 +1356,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                     }
                   }}
                   pathOptions={{
-                    color: getLineColor(shape.route_id),
+                    color: color,
                     weight: weight,
                     opacity: opacity,
                     lineCap: "round",
@@ -1667,15 +1364,14 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                   }}
                 />
 
-                {/* 4. Futuristic dynamic overlay (dashed trace running down the center of selected line) */}
                 {isLineSelected && (
                   <Polyline
                     positions={shape.coordinates}
                     interactive={false}
                     pathOptions={{
-                      color: "#ffffff",
+                      color: hasBuses ? "#ffffff" : "#cbd5e1",
                       weight: 1.5,
-                      opacity: 0.75,
+                      opacity: hasBuses ? 0.75 : 0.4,
                       dashArray: "6, 14",
                       lineCap: "round",
                       lineJoin: "round",
@@ -1686,20 +1382,19 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
             );
           })}
 
-          {/* Physical Network Stops — Multi-color ring markers + white pill labels */}
+          {/* Physical Network Stops */}
           {stopsToShow?.map((stop: any) => {
             const isSelected = selectedStopId === stop.stop_id;
             const stopLines: string[] = stop.lines || [];
 
-            // Check if a bus is currently parked or sitting right on top of this stop
-            const busOnTop = (spiderfiedVehicles as any[]).find(v => 
+            const busOnTop = (spiderfiedVehicles as any[]).find(v =>
               v.position?.lat && v.position?.lon &&
               Math.abs(v.position.lat - stop.stop_lat) < 0.00018 &&
               Math.abs(v.position.lon - stop.stop_lon) < 0.00018
             );
 
-            const displayPosition: [number, number] = busOnTop 
-              ? [stop.stop_lat + 0.00028, stop.stop_lon + 0.00028] // Shift north-east by ~30 meters to ensure full clickability
+            const displayPosition: [number, number] = busOnTop
+              ? [stop.stop_lat + 0.00028, stop.stop_lon + 0.00028]
               : [stop.stop_lat, stop.stop_lon];
 
             return (
@@ -1708,7 +1403,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                   <Polyline
                     positions={[[stop.stop_lat, stop.stop_lon], displayPosition]}
                     pathOptions={{
-                      color: "#00f0ff", // High-visibility cyber-cyan neon color
+                      color: "#00f0ff",
                       weight: 2.2,
                       opacity: 0.85,
                       dashArray: "4, 4",
@@ -1720,9 +1415,9 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                 <Marker
                   position={displayPosition}
                   icon={createStopIcon(
-                    isSelected, 
-                    stopLines, 
-                    zoomLevel, 
+                    isSelected,
+                    stopLines,
+                    zoomLevel,
                     selectedLineId || selectedBus?.route_id || highlightedBus?.route_id,
                     stop.stop_name || ""
                   )}
@@ -1738,19 +1433,20 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                 >
                   {(zoomLevel >= 18 || isSelected) && (
                     <Tooltip
-                       direction="right"
-                       offset={[12, 0]}
-                       opacity={1}
-                       permanent
-                       interactive={true}
-                       className={`stop-label-pill ${isSelected ? "stop-label-selected" : ""}`}
-                       eventHandlers={{
-                         click: (e) => {
-                           L.DomEvent.stopPropagation(e);
-                           setSelectedStopId(stop.stop_id);
-                           setSelectedBusId(null);
-                         }
-                       }}
+                      key={`tooltip-${stop.stop_id}-${isSelected}`}
+                      direction="right"
+                      offset={[12, 0]}
+                      opacity={1}
+                      permanent
+                      interactive={true}
+                      className={`stop-label-pill ${isSelected ? "stop-label-selected" : ""}`}
+                      eventHandlers={{
+                        click: (e) => {
+                          L.DomEvent.stopPropagation(e);
+                          setSelectedStopId(stop.stop_id);
+                          setSelectedBusId(null);
+                        }
+                      }}
                     >
                       {stop.stop_name}
                     </Tooltip>
@@ -1764,7 +1460,6 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
           {showBuses && (spiderfiedVehicles as any[]).map((vehicle) => {
             if (!vehicle.position?.lat || !vehicle.position?.lon) return null;
 
-            const isDelayed = (vehicle.delay || 0) > 60;
             const isSelected = selectedBusId === vehicle.id || highlightedBusId === vehicle.id;
             return (
               <Marker
@@ -1776,7 +1471,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                   click: (e) => {
                     L.DomEvent.stopPropagation(e);
                     setSelectedBusId(vehicle.id);
-                    setSelectedStopId(null); // Deselect stop
+                    setSelectedStopId(null);
                   },
                 }}
               />
@@ -1792,8 +1487,8 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
           bottom-[76px] left-0 right-0 h-[50vh] max-h-[400px] w-full 
           /* Desktop floating sidebar styles */
           md:bottom-24 md:left-6 md:right-auto md:w-[380px] md:h-[calc(100vh-220px)] md:max-h-[580px]
-          ${(selectedBus || selectedStop) 
-            ? "translate-y-0 md:scale-100 md:opacity-100 opacity-100" 
+          ${(selectedBus || selectedStop)
+            ? "translate-y-0 md:scale-100 md:opacity-100 opacity-100"
             : "translate-y-[calc(100%+80px)] md:scale-95 md:opacity-0 md:translate-y-0 opacity-0 pointer-events-none"
           }`}
       >
@@ -1803,451 +1498,49 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
 
           {/* CONTENT FOR SELECTED BUS */}
           {selectedBus && (
-            <>
-              {/* Airy & Premium Header Row */}
-              <div className="flex flex-col gap-1.5 md:gap-2 shrink-0 pb-1.5 md:pb-2.5 border-b border-white/5">
-                <div className="flex justify-between items-center w-full gap-3">
-                  <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
-                    {/* Route Badge */}
-                    <div
-                      className="w-9 h-9 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center font-black text-sm md:text-lg border shadow-lg shrink-0"
-                      style={{
-                        backgroundColor: `${getLineColor(selectedBus.route_id)}25`,
-                        color: getLineColor(selectedBus.route_id),
-                        borderColor: `${getLineColor(selectedBus.route_id)}90`,
-                        boxShadow: `0 0 12px ${getLineColor(selectedBus.route_id)}20`
-                      }}
-                    >
-                      {selectedBus.route_id || "B"}
-                    </div>
-                    
-                    {/* Bus Name, Delay & Type */}
-                    <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <h3 className="text-sm md:text-lg font-black text-white tracking-wide leading-tight">
-                          Bus {formatBusName(selectedBus.vehicle_id || "Inconnu")}
-                        </h3>
-                        {/* Delay / On-time Status (Merged into header for maximum space savings!) */}
-                        {departureStatus ? (
-                          <span className="px-1.5 py-0.5 rounded text-[7px] md:text-[8px] font-black uppercase tracking-wider bg-amber-500/15 border border-amber-500/30 text-amber-400 animate-pulse">
-                            Départ {departureStatus.minutes}m
-                          </span>
-                        ) : (
-                          <span className={`px-1.5 py-0.5 rounded text-[7px] md:text-[8px] font-black uppercase tracking-wider border ${
-                            (selectedBus.delay || 0) > 60
-                              ? "bg-orange-500/15 border-orange-500/30 text-orange-400 shadow-[0_0_6px_rgba(249,115,22,0.15)]"
-                              : "bg-emerald-500/15 border-emerald-500/30 text-emerald-400 shadow-[0_0_6px_rgba(16,185,129,0.15)]"
-                          }`}>
-                            {(selectedBus.delay || 0) > 60 ? `Retard de ${Math.round((selectedBus.delay || 0) / 60)} min` : "À l'heure"}
-                          </span>
-                        )}
-                        <span className={`hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[7px] md:text-[8px] font-black uppercase tracking-wider ${
-                          getVehicleType(selectedBus.vehicle_id || "") === "Articulé"
-                            ? "bg-amber-500/15 border border-amber-500/30 text-amber-400"
-                            : "bg-slate-800 border border-slate-700 text-slate-400"
-                        }`}>
-                          {getVehicleType(selectedBus.vehicle_id || "")}
-                        </span>
-                      </div>
-                      
-                      {/* Direction Row with Scrolling Marquee on Overflow */}
-                      <div className="text-[10px] md:text-xs font-semibold text-slate-400 w-full overflow-hidden flex items-center gap-1">
-                        <span className="shrink-0">Direction :</span>
-                        <div className="relative overflow-hidden flex-1 h-[14px] md:h-[16px]">
-                          <div 
-                            ref={directionRef}
-                            className={`absolute left-0 top-0 whitespace-nowrap transition-transform ${
-                              scrollDistance > 0 ? "animate-direction-marquee" : ""
-                            }`}
-                            style={{ 
-                              transform: scrollDistance > 0 ? undefined : "none",
-                              "--scroll-dist": `-${scrollDistance}px`
-                            } as React.CSSProperties}
-                          >
-                            <span className="font-extrabold text-amber-500 uppercase tracking-wide">
-                              {selectedBus.trip_headsign || "Sans voyageurs"}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Telemetry Row (Live update freshness) */}
-                      {selectedBus.timestamp && (
-                        <div className="flex items-center gap-1.5 mt-1 flex-wrap text-[8.5px] md:text-[9.5px] text-slate-400 font-extrabold uppercase tracking-wide">
-                          <span className="flex items-center gap-1.5 bg-slate-900/60 border border-white/5 px-2 py-0.5 rounded-lg text-slate-400 font-bold normal-case shadow-sm">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            Actualisé {(() => {
-                              const ageSec = Math.floor(Date.now() / 1000) - selectedBus.timestamp;
-                              if (ageSec < 5) return "à l'instant";
-                              if (ageSec < 60) return `il y a ${ageSec}s`;
-                              return `il y a ${Math.floor(ageSec / 60)}m`;
-                            })()}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Close button */}
-                  <button
-                    onClick={() => setSelectedBusId(null)}
-                    className="w-8 h-8 md:w-10 md:h-10 flex items-center justify-center rounded-full bg-slate-800/80 hover:bg-slate-700/80 text-slate-400 hover:text-white transition-all border border-white/5 active:scale-95 shrink-0"
-                  >
-                    <X size={15} className="md:w-[18px] md:h-[18px]" />
-                  </button>
-                </div>
-
-                {/* Second Row: Real-time stop status (Very compact banner!) */}
-                {currentStopInfo?.name && (
-                  <div className="w-full">
-                    <span className={`inline-flex w-full items-center gap-1.5 px-2 py-0.5 rounded-md border text-[8px] md:text-[9px] font-black uppercase tracking-widest ${
-                      currentStopInfo.status === 1 
-                        ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" 
-                        : "bg-cyan-500/10 border-cyan-500/20 text-cyan-400"
-                    }`}>
-                      <span className="relative flex h-1 w-1">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-current opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-1 w-1 bg-current"></span>
-                      </span>
-                      {currentStopInfo.status === 1 ? "À l'arrêt" : "En approche de"} : {currentStopInfo.name}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Scrollable Course Timeline (Ultra-tight & spacious) */}
-              <div className="flex-1 overflow-y-auto no-scrollbar rounded-xl bg-slate-950/40 border border-white/5 p-3.5 mt-0.5">
-                <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5 border-b border-white/5 pb-1.5">
-                  <MapPin size={11} className="text-amber-500" />
-                  Trajet en temps réel
-                </h4>
-
-                <div className="relative pl-6 border-l-2 border-slate-800 space-y-2 md:space-y-3.5">
-                  {!staticData?.stops && (
-                    <div className="text-slate-500 text-xs animate-pulse">Chargement du trajet...</div>
-                  )}
-
-                  {staticData?.stops?.map((stop: any) => {
-                    const currentSeq = selectedBus.current_stop_sequence || 0;
-                    const stopSeq = stop.stop_sequence;
-
-                    const isPassed = stopSeq < currentSeq;
-                    const isNext = stopSeq === currentSeq;
-
-                    const isFirstStop = stop.stop_id === staticData?.stops?.[0]?.stop_id;
-                    const isWaitingToDepart = isFirstStop && departureStatus?.isWaiting;
-
-                    const update = selectedBus.stop_time_updates?.find((u) => u.stop_id === stop.stop_id);
-                    const hasUpdate = !!update?.arrival?.time;
-
-                    const scheduledTime = stop.arrival_time?.slice(0, 5) || "--:--";
-                    const expectedTime = hasUpdate
-                      ? new Date((update.arrival!.time as number) * 1000).toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" })
-                      : null;
-                    
-                    let delayMin = 0;
-                    if (hasUpdate && expectedTime) {
-                      if (update.arrival?.delay !== undefined && update.arrival?.delay !== null && update.arrival?.delay !== 0) {
-                        delayMin = Math.round(update.arrival.delay / 60);
-                      } else {
-                        // Fallback: calculate delay from the difference between expectedTime and scheduledTime
-                        const timeToMinutes = (tStr: string) => {
-                          const parts = tStr.split(":");
-                          return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
-                        };
-                        const expectedMins = timeToMinutes(expectedTime);
-                        const scheduledMins = timeToMinutes(scheduledTime);
-                        let calculatedDelay = expectedMins - scheduledMins;
-                        if (calculatedDelay < -1000) {
-                          calculatedDelay += 1440;
-                        } else if (calculatedDelay > 1000) {
-                          calculatedDelay -= 1440;
-                        }
-                        delayMin = calculatedDelay;
-                      }
-                    }
-                    const activeColor = getLineColor(selectedBus.route_id);
-
-                    const dotClass = isPassed ? "bg-slate-700 border-slate-600" : isNext ? "animate-pulse" : "bg-slate-500 border-slate-700";
-                    const dotStyle = isNext ? { backgroundColor: activeColor, borderColor: activeColor, boxShadow: `0 0 10px ${activeColor}cc` } : {};
-
-                    const textColor = isPassed ? "text-slate-500 line-through font-medium" : isNext ? "" : "text-slate-200";
-                    const textColorStyle = isNext ? { color: activeColor, fontWeight: "900" } : {};
-
-                    const timeColor = isPassed ? "text-slate-600" : isNext ? "" : "text-slate-400";
-                    const timeColorStyle = isNext ? { color: activeColor, fontWeight: "900" } : {};
-
-                    // Calculate real-time bus position between stops with our new taller spacing
-                    let busStyle = {};
-                    const status = selectedBus.current_status ?? 0;
-
-                    if (status === 1) {
-                      // STOPPED_AT: On the dot
-                      busStyle = { top: "50%", transform: "translateY(-50%)" };
-                    } else if (status === 2) {
-                      // INCOMING_AT: Slightly above the dot
-                      busStyle = { top: "-8px", transform: "translateY(-50%)" };
-                    } else {
-                      // IN_TRANSIT_TO: Between this stop and the previous one
-                      busStyle = { top: "-18px", transform: "translateY(-50%)" };
-                    }
-
-                    if (isPassed && stopSeq < currentSeq - 1) return null;
-
-                    return (
-                      <div key={stop.stop_id} className="relative flex items-center justify-between min-h-[26px] md:min-h-[30px] py-0.5 md:py-1">
-                        {/* Static stop dot (Centered mathematically on the 2px border line) */}
-                        <div className={`absolute -left-[29.5px] w-3.5 h-3.5 rounded-full border-2 z-10 ${dotClass}`} style={dotStyle} />
-
-                        {/* Real-time animated bus on the timeline */}
-                        {isNext && (
-                          <div
-                            className="absolute -left-[34.5px] w-6 h-6 rounded-full flex items-center justify-center z-20 transition-all duration-1000 ease-in-out"
-                            style={{
-                              ...busStyle,
-                              boxShadow: `0 0 12px ${activeColor}`
-                            }}
-                          >
-                            <div
-                              className="absolute inset-0 rounded-full animate-ping opacity-45"
-                              style={{ backgroundColor: activeColor }}
-                            />
-                            <div
-                              className="relative w-full h-full rounded-full flex items-center justify-center border-2"
-                              style={{
-                                borderColor: activeColor,
-                                color: activeColor,
-                                backgroundColor: "#020617"
-                              }}
-                            >
-                              <Bus size={11} className="animate-pulse" />
-                            </div>
-                          </div>
-                        )}
-
-                        <div className={`text-sm font-bold truncate pr-3 ${textColor}`} style={textColorStyle}>
-                          {stop.stop_name}
-                        </div>
-                        
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {hasUpdate && expectedTime ? (
-                            <div className="flex flex-col items-end gap-0.5">
-                              {/* Expected real-time arrival */}
-                              <div className={`text-xs font-black bg-slate-900 border border-white/5 px-2 py-0.5 rounded-lg shadow-inner ${timeColor}`} style={timeColorStyle}>
-                                {expectedTime}
-                              </div>
-                              
-                              {/* Scheduled time and delay status indicator */}
-                              <div className="flex items-center gap-1 text-[8px] font-black uppercase tracking-wider">
-                                <span className="text-slate-500 line-through">
-                                  {scheduledTime}
-                                </span>
-                                {isWaitingToDepart ? (
-                                  <span className="px-1 py-0.2 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 font-extrabold animate-pulse">
-                                    Départ {departureStatus.minutes}m
-                                  </span>
-                                ) : delayMin > 0 ? (
-                                  <span className="px-1 py-0.2 rounded bg-red-500/10 border border-red-500/20 text-red-400">
-                                    Retard de {delayMin} min
-                                  </span>
-                                ) : delayMin < 0 ? (
-                                  <span className="px-1 py-0.2 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-                                    Avance de {Math.abs(delayMin)} min
-                                  </span>
-                                ) : (
-                                  <span className="px-1 py-0.2 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-                                    À l'heure
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          ) : (
-                            /* Fallback to theoretical only */
-                            <div className={`text-[10px] font-extrabold bg-slate-900 border border-white/5 px-2.5 py-0.5 rounded-lg shadow-inner ${timeColor}`} style={timeColorStyle}>
-                              {scheduledTime}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </>
+            <BusPanelDetail
+              selectedBus={selectedBus}
+              staticData={staticData}
+              setSelectedBusId={setSelectedBusId}
+            />
           )}
 
           {/* CONTENT FOR SELECTED STOP */}
           {selectedStop && (
-            <>
-              <div className="flex justify-between items-start shrink-0">
-                <div className="flex items-center gap-2.5 md:gap-3">
-                  <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center bg-slate-800 text-slate-300 border border-slate-700">
-                    <MapPin size={20} className="md:w-6 md:h-6" />
-                  </div>
-                  <div>
-                    <div className="bg-black border border-slate-800 rounded-lg md:rounded-xl px-3 py-1.5 md:px-4 md:py-2 shadow-[inset_0_2px_8px_rgba(0,0,0,0.8)] relative overflow-hidden flex items-center justify-between min-w-[150px] md:min-w-[200px]">
-                      {/* Ambient grid texture overlay to simulate LED display */}
-                      <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[size:100%_4px,6px_100%] pointer-events-none" />
-                      
-                      <div className="relative z-10 flex flex-col">
-                        <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">
-                          Arrêt Physique
-                        </span>
-                        <span className="text-xs md:text-sm font-black font-mono text-cyan-400 uppercase tracking-wider leading-tight drop-shadow-[0_0_6px_rgba(34,211,238,0.85)] truncate max-w-[110px] md:max-w-[160px]">
-                          {selectedStop.stop_name}
-                        </span>
-                      </div>
-                      
-                      {/* Led indicators on the right of the sign */}
-                      <div className="relative z-10 flex gap-1 pl-3 border-l border-slate-800/80 shrink-0">
-                        <span className="w-1 h-1 rounded-full bg-cyan-500/30 animate-pulse" />
-                        <span className="w-1 h-1 rounded-full bg-cyan-400 drop-shadow-[0_0_4px_rgba(34,211,238,0.85)]" />
-                      </div>
-                    </div>
-
-                    {/* Line Badges directly under the black LED panel */}
-                    <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                      {(selectedStop.lines || []).map((l: string) => {
-                        const lineColor = getLineColor(l);
-                        return (
-                          <span 
-                            key={l}
-                            className="px-2.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider border shrink-0"
-                            style={{
-                              color: lineColor,
-                              borderColor: `${lineColor}40`,
-                              backgroundColor: `${lineColor}15`
-                            }}
-                          >
-                            Ligne {l}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setSelectedStopId(null)}
-                  className="w-8 h-8 md:w-10 md:h-10 flex items-center justify-center rounded-full bg-slate-800/80 text-slate-400 hover:text-white transition-colors border border-white/5 active:scale-95"
-                >
-                  <X size={15} />
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto no-scrollbar rounded-xl bg-slate-950/50 border border-white/5 p-3 md:p-4 mt-1.5 md:mt-2">
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-                  <Bus size={14} />
-                  Prochains passages
-                </h4>
-
-                <div className="space-y-1.5 md:space-y-3">
-                  {upcomingBusesForStop.length === 0 ? (
-                    <div className="text-sm text-slate-500 text-center py-4">
-                      Aucun passage prévu dans l'immédiat.
-                    </div>
-                  ) : (
-                    upcomingBusesForStop.map((b: any, index: number) => {
-                      const isImminent = b.etaMinutes <= 0;
-                      const activeColor = getLineColor(b.vehicle.route_id);
-                      const isFirst = index === 0;
-
-                      return (
-                        <button
-                          key={`${b.vehicle.id}-${index}`}
-                          onClick={() => {
-                            setHighlightedBusId(b.vehicle.id);
-                          }}
-                          className={`w-full flex items-center justify-between p-2 md:p-3.5 rounded-lg md:rounded-xl transition-all duration-300 hover:scale-[1.01] active:scale-[0.99] cursor-pointer text-left ${
-                            isFirst
-                              ? "border-[1.5px] shadow-lg animate-pulse"
-                              : "bg-slate-900 border border-white/5 hover:bg-slate-800/80"
-                          }`}
-                          style={isFirst ? {
-                            backgroundColor: `${activeColor}15`,
-                            borderColor: activeColor,
-                            boxShadow: `0 0 16px ${activeColor}25`
-                          } : {}}
-                        >
-                          <div className="flex items-center gap-2 md:gap-3">
-                            <div
-                              className="w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center font-bold text-xs border shadow-inner shrink-0"
-                              style={{
-                                backgroundColor: `${activeColor}33`,
-                                color: activeColor,
-                                borderColor: `${activeColor}80`
-                              }}
-                            >
-                              {b.vehicle.route_id || "B"}
-                            </div>
-                            <div className="flex flex-col">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="text-sm font-semibold text-slate-200">
-                                  Bus {formatBusName(b.vehicle.vehicle_id || "Inconnu")}
-                                </span>
-                                <span className={`px-1 py-0.2 rounded text-[7px] font-black uppercase tracking-wider ${
-                                  getVehicleType(b.vehicle.vehicle_id || "") === "Articulé"
-                                    ? "bg-amber-500/10 border border-amber-500/20 text-amber-400"
-                                    : "bg-slate-800 border border-slate-700 text-slate-400"
-                                }`}>
-                                  {getVehicleType(b.vehicle.vehicle_id || "")}
-                                </span>
-                                {isFirst && (
-                                  <span
-                                    className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider animate-pulse"
-                                    style={{
-                                      backgroundColor: `${activeColor}25`,
-                                      color: activeColor
-                                    }}
-                                  >
-                                    PROCHAIN
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-sm font-bold" style={isImminent ? { color: activeColor, animation: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite" } : { color: isFirst ? "#ffffff" : "#cbd5e1" }}>
-                              {isImminent ? "À l'approche" : `${b.etaMinutes} min`}
-                            </div>
-                            <div className="text-[10px] text-slate-500">
-                              {new Date(b.arrivalTime * 1000).toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" })}
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            </>
+            <StopPanelDetail
+              selectedStop={selectedStop}
+              setSelectedStopId={setSelectedStopId}
+              filteredVehicles={filteredVehicles}
+              setHighlightedBusId={setHighlightedBusId}
+            />
           )}
 
-        {/* Nearest Stop Notification Banner */}
-        {nearestStopBanner && (
-          <div className="absolute top-24 left-4 right-4 z-[1001] flex justify-center pointer-events-none">
-            <div className="bg-cyan-500 border border-cyan-400 text-slate-950 px-4 py-2.5 rounded-2xl shadow-[0_10px_25px_rgba(34,211,238,0.4)] flex items-center gap-2 animate-in slide-in-from-top-3 duration-300 pointer-events-auto">
-              <MapPin size={14} className="animate-bounce shrink-0" />
-              <span className="text-xs font-black uppercase tracking-wider">
-                Arrêt suggéré : {nearestStopBanner}
-              </span>
+          {/* Nearest Stop Notification Banner */}
+          {nearestStopBanner && (
+            <div className="absolute top-24 left-4 right-4 z-[1001] flex justify-center pointer-events-none">
+              <div className="bg-cyan-500 border border-cyan-400 text-slate-950 px-4 py-2.5 rounded-2xl shadow-[0_10px_25px_rgba(34,211,238,0.4)] flex items-center gap-2 animate-in slide-in-from-top-3 duration-300 pointer-events-auto">
+                <MapPin size={14} className="animate-bounce shrink-0" />
+                <span className="text-xs font-black uppercase tracking-wider">
+                  Arrêt suggéré : {nearestStopBanner}
+                </span>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* GPS Warning Notification Banner */}
-        {gpsWarning && (
-          <div className="absolute top-24 left-4 right-4 z-[1001] flex justify-center pointer-events-none">
-            <div className="bg-red-500 border border-red-400 text-white px-4 py-2.5 rounded-2xl shadow-[0_10px_25px_rgba(239,68,68,0.4)] flex items-center gap-2 animate-in slide-in-from-top-3 duration-300 pointer-events-auto">
-              <AlertCircle size={14} className="animate-pulse shrink-0 text-white" />
-              <span className="text-xs font-black uppercase tracking-wider">
-                {gpsWarning}
-              </span>
+          {/* GPS Warning Notification Banner */}
+          {gpsWarning && (
+            <div className="absolute top-24 left-4 right-4 z-[1001] flex justify-center pointer-events-none">
+              <div className="bg-red-500 border border-red-400 text-white px-4 py-2.5 rounded-2xl shadow-[0_10px_25px_rgba(239,68,68,0.4)] flex items-center gap-2 animate-in slide-in-from-top-3 duration-300 pointer-events-auto">
+                <AlertCircle size={14} className="animate-pulse shrink-0 text-white" />
+                <span className="text-xs font-black uppercase tracking-wider">
+                  {gpsWarning}
+                </span>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
 }

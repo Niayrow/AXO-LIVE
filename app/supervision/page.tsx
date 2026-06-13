@@ -17,7 +17,8 @@ import {
   CheckCircle2, 
   Clock, 
   ArrowRight, 
-  X
+  X,
+  ChevronDown
 } from "lucide-react";
 
 const AVAILABLE_LINES = ["A", "B", "C1", "C2", "D"];
@@ -68,6 +69,7 @@ export default function SupervisionPage() {
     }
     return "A";
   });
+  const [expandedAlerts, setExpandedAlerts] = useState<Record<string, boolean>>({});
 
   // Admin authentication states
   const [isAdminMode, setIsAdminMode] = useState(false);
@@ -827,54 +829,71 @@ export default function SupervisionPage() {
                   return (
                     <div 
                       key={`${alert.id}-${idx}`}
-                      className="rounded-2xl p-5 border backdrop-blur-md"
+                      className="rounded-xl border backdrop-blur-md overflow-hidden transition-all duration-300"
                       style={{
                         backgroundColor: "rgba(2, 6, 23, 0.6)",
                         borderColor: `${hexColor}30`,
-                        boxShadow: `0 4px 20px ${hexColor}05`,
+                        boxShadow: `0 4px 15px ${hexColor}03`,
                       }}
                     >
-                      <div className="flex gap-4">
-                        {/* Icon */}
-                        <div 
-                          className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border"
-                          style={{
-                            backgroundColor: `${hexColor}10`,
-                            borderColor: `${hexColor}20`,
-                          }}
-                        >
-                          <AlertTriangle size={18} style={{ color: hexColor }} />
-                        </div>
+                      {/* Accordion Header Trigger */}
+                      <button
+                        onClick={() => setExpandedAlerts(prev => ({ ...prev, [alert.id]: !prev[alert.id] }))}
+                        className="w-full flex items-center justify-between gap-3 p-2.5 text-left transition-colors hover:bg-white/5 active:scale-[0.99] cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          {/* Compact Icon */}
+                          <div 
+                            className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border"
+                            style={{
+                              backgroundColor: `${hexColor}10`,
+                              borderColor: `${hexColor}20`,
+                            }}
+                          >
+                            <AlertTriangle size={13} style={{ color: hexColor }} />
+                          </div>
 
-                        {/* Content */}
-                        <div className="flex flex-col pt-0.5">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="font-bold text-white text-sm leading-tight">
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <h3 className="font-bold text-white text-xs leading-snug truncate flex-1">
                               {alert.title}
                             </h3>
                             <div 
-                              className="px-2 py-0.5 rounded text-[11px] font-black tracking-wider shadow-sm"
+                              className="px-1.5 py-0.2 rounded text-[8px] font-black tracking-wider shadow-sm uppercase shrink-0"
                               style={{
                                 backgroundColor: hexColor,
                                 color: "#ffffff"
                               }}
                             >
-                              {selectedLine}
+                              Ligne {selectedLine}
                             </div>
                           </div>
-                          
-                          {dateRangeStr && (
-                            <p 
-                              className="text-[10px] font-bold uppercase tracking-wider mt-1.5"
-                              style={{ color: hexColor }}
-                            >
-                              {dateRangeStr}
-                            </p>
-                          )}
+                        </div>
+                        <ChevronDown 
+                          size={14} 
+                          className={`text-slate-400 transition-transform duration-300 shrink-0 ${
+                            expandedAlerts[alert.id] ? "rotate-180 text-white" : ""
+                          }`} 
+                        />
+                      </button>
 
-                          <p className="text-slate-300 text-[13px] mt-3 leading-relaxed">
-                            {alert.description}
-                          </p>
+                      {/* Expandable Body */}
+                      <div className={`grid transition-all duration-300 ease-in-out ${
+                        expandedAlerts[alert.id] ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                      }`}>
+                        <div className="overflow-hidden">
+                          <div className="px-3 pb-3 pt-1 border-t border-white/5 flex flex-col gap-2 bg-slate-950/20">
+                            {dateRangeStr && (
+                              <p 
+                                className="text-[9px] font-black uppercase tracking-wider"
+                                style={{ color: hexColor }}
+                              >
+                                {dateRangeStr}
+                              </p>
+                            )}
+                            <p className="text-slate-350 text-[11px] leading-relaxed">
+                              {alert.description}
+                            </p>
+                          </div>
                         </div>
                       </div>
                     </div>
