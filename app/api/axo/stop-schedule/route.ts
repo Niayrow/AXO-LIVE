@@ -6,7 +6,7 @@ const GTFS_STATIC_URL = "https://api.oisemob.cityway.fr/dataflow/offre-tc/downlo
 
 let cachedData: any = null;
 let lastCacheTime = 0;
-const CACHE_TTL = 1000 * 60 * 60 * 24; // 24 hours
+const CACHE_TTL = 1000 * 60 * 60 * 24; // 24 heures
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -35,20 +35,41 @@ export async function GET(req: NextRequest) {
       const calendar = Papa.parse(calendarFile, { header: true }).data as any[];
       const calendarDates = Papa.parse(calendarDatesFile, { header: true }).data as any[];
 
-      cachedData = { routes, trips, stopTimes, calendar, calendarDates };
+      // OPTIMISATION MAJEURE 1 : Indexer les routes par route_id
+      const routeMap = new Map<string, string>();
+      routes.forEach((r: any) => {
+        if (r.route_id) routeMap.set(r.route_id, r.route_short_name);
+      });
+
+      // OPTIMISATION MAJEURE 2 : Indexer les trips par trip_id
+      const tripMap = new Map<string, any>();
+      trips.forEach((t: any) => {
+        if (t.trip_id) tripMap.set(t.trip_id, t);
+      });
+
+      // OPTIMISATION MAJEURE 3 : Grouper stop_times par stop_id pour éviter le .filter() linéaire global
+      const stopTimesByStopMap = new Map<string, any[]>();
+      stopTimes.forEach((st: any) => {
+        if (!st.stop_id) return;
+        if (!stopTimesByStopMap.has(st.stop_id)) {
+          stopTimesByStopMap.set(st.stop_id, []);
+        }
+        stopTimesByStopMap.get(st.stop_id)!.push(st);
+      });
+
+      cachedData = { routeMap, tripMap, stopTimesByStopMap, calendar, calendarDates };
       lastCacheTime = Date.now();
     }
 
-    const { routes, trips, stopTimes, calendar, calendarDates } = cachedData;
+    const { routeMap, tripMap, stopTimesByStopMap, calendar, calendarDates } = cachedData;
 
-    // 1. Calculate active service_ids for the requested date (or TODAY) in Paris Timezone
-    const dateParam = searchParams.get("date"); // Optional: YYYY-MM-DD format
+    // 1. Calcul des service_ids actifs (Heure de Paris)
+    const dateParam = searchParams.get("date");
     let targetDate: Date;
     let yyyymmdd: string;
     let dayOfWeek: string;
 
     if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
-      // Parse the provided date in Paris timezone
       targetDate = new Date(dateParam + "T12:00:00+02:00");
       const [y, m, d] = dateParam.split("-");
       yyyymmdd = `${y}${m}${d}`;
@@ -76,7 +97,6 @@ export async function GET(req: NextRequest) {
 
     const activeServiceIds = new Set<string>();
 
-    // Scan calendar.txt
     calendar.forEach((c: any) => {
       const start = c.start_date;
       const end = c.end_date;
@@ -87,7 +107,6 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    // Scan calendar_dates.txt for exceptions
     calendarDates.forEach((cd: any) => {
       if (cd.date === yyyymmdd) {
         if (cd.exception_type === "1") {
@@ -98,25 +117,31 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    // 2. Find and filter stop times for the requested stop ids on active services
-    const rawSchedules = stopTimes
-      .filter((st: any) => stopIds.includes(st.stop_id))
+    // 2. Récupérer uniquement les stop_times des arrêts demandés via notre Map indexée
+    const targetedStopTimes: any[] = [];
+    stopIds.forEach((id: string) => {
+      const list = stopTimesByStopMap.get(id) || [];
+      targetedStopTimes.push(...list);
+    });
+
+    const rawSchedules = targetedStopTimes
       .map((st: any) => {
-        const trip = trips.find((t: any) => t.trip_id === st.trip_id);
+        // Accès instantané O(1) au lieu de .find() linéaire
+        const trip = tripMap.get(st.trip_id);
         if (!trip || !activeServiceIds.has(trip.service_id)) return null;
-        
-        const route = routes.find((r: any) => r.route_id === trip.route_id);
+
+        const routeShortName = routeMap.get(trip.route_id);
         return {
-          route_id: route?.route_short_name || "Unknown",
+          route_id: routeShortName || "Unknown",
           trip_id: st.trip_id,
-          departure_time: st.departure_time, // e.g. "14:45:00"
+          departure_time: st.departure_time,
           stop_sequence: parseInt(st.stop_sequence),
           trip_headsign: trip.trip_headsign || "Inconnue"
         };
       })
       .filter((s: any) => s !== null && ["A", "B", "C1", "C2", "D"].includes(s.route_id));
 
-    // 3. Deduplicate visually redundant times per direction
+    // 3. Déduplication visuelle des horaires redondants
     const uniqueSchedulesMap = new Map<string, any>();
     rawSchedules.forEach((s: any) => {
       const timeKey = s.departure_time.slice(0, 5); // "14:45"
@@ -127,8 +152,6 @@ export async function GET(req: NextRequest) {
     });
 
     const schedules = Array.from(uniqueSchedulesMap.values());
-
-    // Sort by departure time
     schedules.sort((a: any, b: any) => a.departure_time.localeCompare(b.departure_time));
 
     return NextResponse.json({ schedules });

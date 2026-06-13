@@ -4,20 +4,19 @@ import Papa from "papaparse";
 
 const GTFS_STATIC_URL = "https://api.oisemob.cityway.fr/dataflow/offre-tc/download?provider=AXO&dataFormat=GTFS&dataProfil=OPENDATA";
 
-// Cache to hold the downloaded and parsed GTFS data in memory (for demonstration/light use)
-let cachedStops: any[] | null = null;
+let cachedStops: any = null;
 let lastCacheTime = 0;
-const CACHE_TTL = 1000 * 60 * 60 * 24; // 24 hours
+const CACHE_TTL = 1000 * 60 * 60 * 24; // 24 heures
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const lineNumber = searchParams.get("line") || "68"; // Default to Line 68 if not provided
+  const lineNumber = searchParams.get("line") || "68"; // Par défaut Ligne 68 si non fourni
   const directionId = searchParams.get("directionId") || "0";
   const tripId = searchParams.get("trip_id");
 
   try {
     if (!cachedStops || Date.now() - lastCacheTime > CACHE_TTL) {
-      // 1. Download GTFS ZIP
+      // 1. Téléchargement du ZIP GTFS
       const response = await fetch(GTFS_STATIC_URL);
       if (!response.ok) {
         throw new Error(`Failed to fetch GTFS static: ${response.statusText}`);
@@ -26,25 +25,41 @@ export async function GET(req: NextRequest) {
       const buffer = await response.arrayBuffer();
       const zip = new AdmZip(Buffer.from(buffer));
 
-      // 2. Extract specific files
+      // 2. Extraction des fichiers texte
       const routesFile = zip.getEntry("routes.txt")?.getData().toString("utf8") || "";
       const tripsFile = zip.getEntry("trips.txt")?.getData().toString("utf8") || "";
       const stopsFile = zip.getEntry("stops.txt")?.getData().toString("utf8") || "";
       const stopTimesFile = zip.getEntry("stop_times.txt")?.getData().toString("utf8") || "";
 
-      // 3. Parse CSV files
+      // 3. Parsing des fichiers CSV
       const routes = Papa.parse(routesFile, { header: true }).data as any[];
       const trips = Papa.parse(tripsFile, { header: true }).data as any[];
       const stops = Papa.parse(stopsFile, { header: true }).data as any[];
       const stopTimes = Papa.parse(stopTimesFile, { header: true }).data as any[];
 
-      cachedStops = { routes, trips, stops, stopTimes } as any;
+      // OPTIMISATION MAJEURE 1 : Indexer les arrêts par stop_id dans une Map O(1)
+      const stopMap = new Map<string, any>();
+      stops.forEach((s: any) => {
+        if (s.stop_id) stopMap.set(s.stop_id, s);
+      });
+
+      // OPTIMISATION MAJEURE 2 : Indexer les stop_times par trip_id (Group By)
+      const stopTimesByTrip = new Map<string, any[]>();
+      stopTimes.forEach((st: any) => {
+        if (!st.trip_id) return;
+        if (!stopTimesByTrip.has(st.trip_id)) {
+          stopTimesByTrip.set(st.trip_id, []);
+        }
+        stopTimesByTrip.get(st.trip_id)!.push(st);
+      });
+
+      cachedStops = { routes, trips, stopMap, stopTimesByTrip };
       lastCacheTime = Date.now();
     }
 
-    const { routes, trips, stops, stopTimes } = cachedStops as any;
+    const { routes, trips, stopMap, stopTimesByTrip } = cachedStops;
 
-    let trip;
+    let trip: any = null;
     let finalRouteId = null;
 
     if (tripId) {
@@ -54,17 +69,17 @@ export async function GET(req: NextRequest) {
       }
       finalRouteId = trip.route_id;
     } else {
-      // 4. Find the route by short name or route_id
+      // 4. Trouver la route par son nom court ou son id
       const route = routes.find((r: any) => r.route_short_name === lineNumber || r.route_id === lineNumber);
       if (!route) {
         return NextResponse.json({ error: "Route not found" }, { status: 404 });
       }
       finalRouteId = route.route_id;
 
-      // 5. Find a representative trip for this route and direction
+      // 5. Trouver le trip représentatif de la route et de la direction
       trip = trips.find((t: any) => t.route_id === route.route_id && t.direction_id === directionId);
       if (!trip) {
-        // Fallback if no direction matches
+        // Fallback si aucune direction ne correspond
         trip = trips.find((t: any) => t.route_id === route.route_id);
       }
       if (!trip) {
@@ -72,12 +87,14 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 6. Get sequential stops for this trip
-    const tripStops = stopTimes
-      .filter((st: any) => st.trip_id === trip.trip_id)
+    // 6. Récupérer les arrêts séquentiels de ce trajet (Lecture instantanée via les index Map)
+    const rawStopTimes = stopTimesByTrip.get(trip.trip_id) || [];
+
+    const tripStops = rawStopTimes
       .sort((a: any, b: any) => parseInt(a.stop_sequence) - parseInt(b.stop_sequence))
       .map((st: any) => {
-        const stop = stops.find((s: any) => s.stop_id === st.stop_id);
+        // Accès instantané O(1) à la Map au lieu du .find() sur tout le tableau
+        const stop = stopMap.get(st.stop_id);
         return {
           stop_id: st.stop_id,
           stop_name: stop?.stop_name || "Unknown",

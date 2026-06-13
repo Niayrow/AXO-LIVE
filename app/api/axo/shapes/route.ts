@@ -8,8 +8,7 @@ const TARGET_LINES = ["A", "B", "C1", "C2", "D", "E", "EXAL", "F", "S1", "S2", "
 
 export const revalidate = 86400; // Cache at the Edge for 24 hours to eliminate Serverless Function invocations
 
-// Cache to hold the downloaded and parsed GTFS data in memory
-let cachedShapesData: any = null;
+let cachedShapesData: any[] | null = null;
 let lastCacheTime = 0;
 const CACHE_TTL = 1000 * 60 * 60 * 24; // 24 hours
 
@@ -17,7 +16,6 @@ export async function GET(req: NextRequest) {
   try {
     const hasNewLines = cachedShapesData?.some((s: any) => s.route_id === "E");
     if (!cachedShapesData || !hasNewLines || Date.now() - lastCacheTime > CACHE_TTL) {
-      // 1. Download GTFS ZIP
       const response = await fetch(GTFS_STATIC_URL);
       if (!response.ok) {
         throw new Error(`Failed to fetch GTFS static: ${response.statusText}`);
@@ -26,32 +24,56 @@ export async function GET(req: NextRequest) {
       const buffer = await response.arrayBuffer();
       const zip = new AdmZip(Buffer.from(buffer));
 
-      // 2. Extract specific files
       const routesFile = zip.getEntry("routes.txt")?.getData().toString("utf8") || "";
       const tripsFile = zip.getEntry("trips.txt")?.getData().toString("utf8") || "";
       const shapesFile = zip.getEntry("shapes.txt")?.getData().toString("utf8") || "";
 
-      // 3. Parse CSV files
       const routes = Papa.parse(routesFile, { header: true }).data as any[];
       const trips = Papa.parse(tripsFile, { header: true }).data as any[];
       const shapes = Papa.parse(shapesFile, { header: true }).data as any[];
 
+      // 1. OPTIMISATION MAJEURE : Indexer shapes par shape_id en UNE SEULE PASSE (Group By)
+      // On évite de scanner le tableau géant des millions de fois
+      const shapesByIdMap = new Map<string, any[]>();
+      shapes.forEach((s: any) => {
+        if (!s.shape_id) return;
+        if (!shapesByIdMap.has(s.shape_id)) {
+          shapesByIdMap.set(s.shape_id, []);
+        }
+        shapesByIdMap.get(s.shape_id)!.push(s);
+      });
+
+      // 2. Indexer les routes cibles pour un accès O(1)
+      const routeMap = new Map<string, string>();
+      routes.forEach((r: any) => {
+        if (r.route_id && (TARGET_LINES.includes(r.route_short_name) || TARGET_LINES.includes(r.route_id))) {
+          routeMap.set(r.route_id, r.route_short_name);
+        }
+      });
+
+      // 3. Associer les unique shape_ids directement aux noms courts des lignes (ex: "A", "B")
+      const routeShortNameToShapes = new Map<string, Set<string>>();
+      TARGET_LINES.forEach(lineId => routeShortNameToShapes.set(lineId, new Set<string>()));
+
+      trips.forEach((t: any) => {
+        if (!t.shape_id || !t.route_id) return;
+        const shortName = routeMap.get(t.route_id);
+        if (shortName && routeShortNameToShapes.has(shortName)) {
+          routeShortNameToShapes.get(shortName)!.add(t.shape_id);
+        }
+      });
+
       const linesShapes: any[] = [];
 
-      // 4. Find shapes for target lines
-      for (const lineId of TARGET_LINES) {
-        // Find route
-        const route = routes.find((r: any) => r.route_short_name === lineId || r.route_id === lineId);
-        if (!route) continue;
+      // 4. Construire les coordonnées à partir de notre index Map à très haute vitesse
+      TARGET_LINES.forEach((lineId: string) => {
+        const uniqueShapeIds = Array.from(routeShortNameToShapes.get(lineId) || []);
 
-        // Find ALL unique shape_ids for this route
-        const routeTrips = trips.filter((t: any) => t.route_id === route.route_id && t.shape_id);
-        const uniqueShapeIds = Array.from(new Set(routeTrips.map((t: any) => t.shape_id)));
+        uniqueShapeIds.forEach((shapeId: string) => {
+          // Accès instantané O(1) grâce à la Map !
+          const rawPoints = shapesByIdMap.get(shapeId) || [];
 
-        for (const shapeId of uniqueShapeIds) {
-          // Extract shape points
-          const shapePoints = shapes
-            .filter((s: any) => s.shape_id === shapeId)
+          const shapePoints = rawPoints
             .sort((a: any, b: any) => parseInt(a.shape_pt_sequence) - parseInt(b.shape_pt_sequence))
             .map((s: any) => [parseFloat(s.shape_pt_lat), parseFloat(s.shape_pt_lon)]);
 
@@ -62,8 +84,8 @@ export async function GET(req: NextRequest) {
               coordinates: shapePoints
             });
           }
-        }
-      }
+        });
+      });
 
       cachedShapesData = linesShapes;
       lastCacheTime = Date.now();
