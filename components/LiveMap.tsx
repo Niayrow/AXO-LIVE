@@ -465,7 +465,6 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
-  const [isInitialModalOpen, setIsInitialModalOpen] = useState(true);
   const [zoomLevel, setZoomLevel] = useState(13);
 
   // Set of lines with at least one active bus
@@ -560,12 +559,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
   const marqueeRef = useRef<HTMLDivElement>(null);
   const [marqueeDuration, setMarqueeDuration] = useState(32);
 
-  // Automatically dismiss suggestion banner when user interacts and selects anything
-  useEffect(() => {
-    if (selectedLineId || selectedBusId || selectedStopId) {
-      setIsInitialModalOpen(false);
-    }
-  }, [selectedLineId, selectedBusId, selectedStopId]);
+
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -589,7 +583,6 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
         if (bus?.route_id) {
           setSelectedLineId(bus.route_id);
         }
-        setIsInitialModalOpen(false);
       }
     }
   }, [vehicles]);
@@ -734,13 +727,17 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
 
       {/* Top Floating Marquee Alert Banner */}
       {scrollingAlertContent && (
-        <div className="absolute top-0 md:top-4 left-0 md:left-1/2 md:-translate-x-1/2 z-[1000] w-full md:w-[60vw] max-w-3xl h-8 md:h-9 bg-slate-950/40 backdrop-blur-xl border-b md:border border-white/10 rounded-none md:rounded-full flex items-center px-4 shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-hidden pointer-events-auto">
-          <div className="flex items-center gap-2 shrink-0 bg-slate-950/70 backdrop-blur-md z-10 pr-3 border-r border-white/10 h-full">
-            <span className="relative flex h-2 w-2">
-              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${(!alertsData?.alerts || alertsData.alerts.length === 0) ? "bg-emerald-500" : "bg-red-500"}`} />
-              <span className={`relative inline-flex rounded-full h-2 w-2 ${(!alertsData?.alerts || alertsData.alerts.length === 0) ? "bg-emerald-500" : "bg-red-500"}`} />
+        <div className="absolute top-0 md:top-4 left-0 md:left-1/2 md:-translate-x-1/2 z-[1000] w-full md:w-[60vw] max-w-3xl h-8 md:h-9 bg-slate-950/40 backdrop-blur-xl border-b md:border border-white/10 rounded-none md:rounded-full flex items-center px-4 shadow-[0_8px_32px_rgba(0,0,0,0.25)] overflow-hidden pointer-events-auto">
+          <div className={`flex items-center gap-1.5 shrink-0 px-2.5 py-0.5 md:py-1 rounded-full border z-10 ${
+            (!alertsData?.alerts || alertsData.alerts.length === 0)
+              ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+              : "bg-red-500/10 border-red-500/20 text-red-400"
+          }`}>
+            <span className="relative flex h-1.5 w-1.5">
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${(!alertsData?.alerts || alertsData.alerts.length === 0) ? "bg-emerald-400" : "bg-red-400"}`} />
+              <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${(!alertsData?.alerts || alertsData.alerts.length === 0) ? "bg-emerald-500" : "bg-red-500"}`} />
             </span>
-            <span className={`text-[9px] font-black uppercase tracking-widest ${(!alertsData?.alerts || alertsData.alerts.length === 0) ? "text-emerald-400" : "text-red-400"}`}>
+            <span className="text-[9px] font-black uppercase tracking-widest">
               {(!alertsData?.alerts || alertsData.alerts.length === 0) ? (
                 <>
                   <span className="hidden md:inline">Trafic Normal</span>
@@ -748,7 +745,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                 </>
               ) : (
                 <>
-                  <span className="hidden md:inline">Alerte en direct du réseau</span>
+                  <span className="hidden md:inline">Alerte</span>
                   <span className="inline md:hidden">Alerte</span>
                 </>
               )}
@@ -759,13 +756,13 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
             <div className="flex w-max">
               <div
                 ref={marqueeRef}
-                className="animate-marquee-infinite text-[11px] font-bold text-slate-300 flex items-center gap-4 shrink-0 pr-8"
+                className="animate-marquee-infinite text-[11px] font-bold text-slate-100 flex items-center gap-4 shrink-0 pr-8"
                 style={{ "--marquee-duration": `${marqueeDuration}s` } as React.CSSProperties}
               >
                 {scrollingAlertContent}
               </div>
               <div
-                className="animate-marquee-infinite text-[11px] font-bold text-slate-300 flex items-center gap-4 shrink-0 pr-8"
+                className="animate-marquee-infinite text-[11px] font-bold text-slate-100 flex items-center gap-4 shrink-0 pr-8"
                 style={{ "--marquee-duration": `${marqueeDuration}s` } as React.CSSProperties}
               >
                 {scrollingAlertContent}
@@ -775,75 +772,22 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
         </div>
       )}
 
-      {/* Onboarding Suggestion asking which line to visualize */}
-      {isInitialModalOpen && (
-        <div
-          className="fixed bottom-24 left-4 right-4 md:left-auto md:right-4 z-[1000] bg-slate-950/85 border border-white/5 rounded-full px-4 py-2 shadow-[0_10px_25px_rgba(0,0,0,0.5)] flex items-center gap-3.5 backdrop-blur-md animate-in slide-in-from-bottom duration-300 md:max-w-max"
-        >
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-500"></span>
-            </span>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              Suivre une ligne :
-            </span>
-          </div>
 
-          <div className="flex items-center gap-1.5">
-            {Object.keys(LINE_COLORS).map((line) => {
-              const lineColor = LINE_COLORS[line];
-              const hasBuses = activeLinesSet.has(line);
-              return (
-                <button
-                  key={line}
-                  onClick={() => {
-                    setSelectedLineId(line);
-                    setIsInitialModalOpen(false);
-                  }}
-                  className={`w-6 h-6 rounded-full border text-[9px] font-black uppercase transition-all duration-200 flex items-center justify-center hover:scale-110 active:scale-95 cursor-pointer shrink-0 ${!hasBuses ? "opacity-30" : ""
-                    }`}
-                  style={{
-                    backgroundColor: hasBuses ? `${lineColor}20` : "rgba(30, 41, 59, 0.1)",
-                    borderColor: hasBuses ? `${lineColor}40` : "rgba(255, 255, 255, 0.03)",
-                    color: hasBuses ? lineColor : "#64748b",
-                  }}
-                  title={line}
-                >
-                  {line}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="h-3.5 w-[1px] bg-white/10 shrink-0" />
-
-          <button
-            onClick={() => {
-              setIsInitialModalOpen(false);
-            }}
-            className="text-slate-500 hover:text-white transition-colors cursor-pointer shrink-0"
-            title="Fermer"
-          >
-            <X size={12} />
-          </button>
-        </div>
-      )}
 
       {/* Floating Real-time Update Indicator */}
-      <div className="absolute top-11 md:top-4 left-4 z-[1000] flex items-center gap-2 px-3 py-1.5 md:py-2.5 rounded-xl md:rounded-2xl bg-slate-950/92 border border-white/10 backdrop-blur-3xl shadow-lg">
+      <div className="absolute top-11 md:top-4 left-4 z-[1000] flex items-center gap-2 px-3 py-1.5 md:py-2.5 rounded-xl md:rounded-2xl bg-slate-950/40 backdrop-blur-xl border border-white/10 shadow-md">
         <span className="relative flex h-2 w-2">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
           <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
         </span>
-        <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider">
+        <span className="text-[10px] font-bold text-slate-100 uppercase tracking-wider">
           MAJ Bus • {lastUpdated.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
         </span>
       </div>
 
       {/* Top Floating Line Filter Bar */}
       <div className="absolute top-24 md:top-16 left-4 right-4 z-[1000] flex flex-col items-center pointer-events-none gap-2">
-        <div className="pointer-events-auto flex items-center gap-1 p-1 bg-slate-950/92 border border-white/10 backdrop-blur-3xl rounded-2xl shadow-2xl overflow-x-auto max-w-full no-scrollbar">
+        <div className="pointer-events-auto flex items-center gap-1 p-1 bg-slate-950/40 backdrop-blur-xl border border-white/10 rounded-2xl shadow-xl overflow-x-auto max-w-full no-scrollbar">
           <button
             onClick={() => {
               setSelectedLineId(null);
@@ -853,7 +797,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
             }}
             className={`w-8 h-8 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all duration-300 border flex items-center justify-center hover:scale-105 active:scale-95 ${!selectedLineId
                 ? "bg-amber-500 border-amber-400 text-slate-950 shadow-[0_0_10px_rgba(245,158,11,0.3)]"
-                : "bg-slate-950/65 border-white/5 text-slate-400 hover:text-white"
+                : "bg-slate-900/30 border-white/10 text-slate-300 hover:text-white"
               }`}
             title="Toutes les lignes"
           >
@@ -877,9 +821,9 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                 className={`w-8 h-8 rounded-xl text-[10.5px] font-black uppercase transition-all duration-300 border flex items-center justify-center shrink-0 hover:scale-105 active:scale-95 hover:brightness-110 ${!isActive && !hasBuses ? "opacity-35" : ""
                   }`}
                 style={{
-                  backgroundColor: isActive ? `${lineColor}33` : "rgba(2, 6, 23, 0.65)",
-                  borderColor: isActive ? lineColor : "rgba(255, 255, 255, 0.05)",
-                  color: isActive ? "#ffffff" : (hasBuses ? lineColor : "#64748b"),
+                  backgroundColor: isActive ? `${lineColor}40` : "rgba(15, 23, 42, 0.3)",
+                  borderColor: isActive ? lineColor : "rgba(255, 255, 255, 0.08)",
+                  color: isActive ? "#ffffff" : (hasBuses ? lineColor : "#94a3b8"),
                   boxShadow: isActive ? `0 0 10px ${lineColor}40` : "none",
                 }}
                 title={`Ligne ${line} ${!hasBuses ? "(aucun bus en circulation)" : ""}`}
@@ -899,7 +843,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
               }}
               className="px-2.5 h-8 rounded-xl text-[10.5px] font-black uppercase transition-all duration-300 border flex items-center gap-1 shrink-0 animate-in zoom-in duration-300 hover:scale-105 active:scale-95"
               style={{
-                backgroundColor: `${LINE_COLORS[selectedLineId]}33`,
+                backgroundColor: `${LINE_COLORS[selectedLineId]}50`,
                 borderColor: LINE_COLORS[selectedLineId],
                 color: "#ffffff",
                 boxShadow: `0 0 10px ${LINE_COLORS[selectedLineId]}40`,
@@ -916,7 +860,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
             onClick={() => setIsOthersOpen(!isOthersOpen)}
             className={`w-8 h-8 rounded-xl text-[11px] font-black uppercase transition-all duration-300 border flex items-center justify-center shrink-0 hover:scale-105 active:scale-95 ${isOthersOpen
                 ? "bg-amber-500 border-amber-400 text-slate-950 shadow-[0_0_10px_rgba(245,158,11,0.3)]"
-                : "bg-slate-950/65 border-white/5 text-slate-400 hover:text-white"
+                : "bg-slate-900/30 border-white/10 text-slate-300 hover:text-white"
               }`}
             title="Autres lignes"
           >
@@ -926,7 +870,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
 
         {/* Dropdown submenu for "Autres Lignes" */}
         {isOthersOpen && (
-          <div className="pointer-events-auto bg-slate-950/92 backdrop-blur-3xl border border-white/10 p-5 rounded-[28px] shadow-[0_20px_40px_rgba(0,0,0,0.6)] flex flex-col gap-3.5 animate-in fade-in slide-in-from-top-2 duration-300 max-w-sm w-[92vw] overflow-hidden">
+          <div className="pointer-events-auto bg-slate-950/45 backdrop-blur-2xl border border-white/10 p-5 rounded-[28px] shadow-[0_20px_40px_rgba(0,0,0,0.4)] flex flex-col gap-3.5 animate-in fade-in slide-in-from-top-2 duration-300 max-w-sm w-[92vw] overflow-hidden">
             <div className="flex justify-between items-center border-b border-white/5 pb-2.5">
               <h4 className="text-[10px] font-black text-slate-300 uppercase tracking-widest flex items-center gap-1.5">
                 <Bus size={11} className="text-amber-500" />
@@ -958,9 +902,9 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                     className={`py-2.5 px-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-1 shadow-sm hover:scale-[1.02] active:scale-[0.98] cursor-pointer ${!isActive && !hasBuses ? "opacity-35" : ""
                       }`}
                     style={{
-                      backgroundColor: isActive ? `${lineColor}33` : "rgba(2, 6, 23, 0.65)",
-                      borderColor: isActive ? lineColor : "rgba(255, 255, 255, 0.05)",
-                      color: isActive ? "#ffffff" : (hasBuses ? lineColor : "#64748b"),
+                      backgroundColor: isActive ? `${lineColor}40` : "rgba(15, 23, 42, 0.3)",
+                      borderColor: isActive ? lineColor : "rgba(255, 255, 255, 0.08)",
+                      color: isActive ? "#ffffff" : (hasBuses ? lineColor : "#94a3b8"),
                       boxShadow: isActive ? `0 0 10px ${lineColor}30` : "none",
                     }}
                     title={`Ligne ${line} ${!hasBuses ? "(aucun bus en circulation)" : ""}`}
@@ -980,14 +924,14 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
         <div className="flex items-center gap-2 pointer-events-auto">
           {/* Text Search Panel */}
           {isSearchOpen && (
-            <div className="flex items-center gap-1.5 p-1.5 bg-slate-950/92 border border-white/10 backdrop-blur-3xl rounded-2xl shadow-xl animate-in slide-in-from-right-3 duration-200">
+            <div className="flex items-center gap-1.5 p-1.5 bg-slate-950/40 backdrop-blur-xl border border-white/10 rounded-2xl shadow-lg animate-in slide-in-from-right-3 duration-200">
               <Search size={13} className="text-slate-400 ml-2 shrink-0" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Rechercher un arrêt..."
-                className="bg-transparent border-none text-slate-200 placeholder-slate-500 font-bold text-xs focus:ring-0 outline-none w-40 md:w-52 py-0.5"
+                className="bg-transparent border-none text-slate-200 placeholder-slate-400 font-bold text-xs focus:ring-0 outline-none w-40 md:w-52 py-0.5"
                 autoFocus
               />
               {searchQuery && (
@@ -1005,9 +949,9 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
           <button
             onClick={triggerLocateUser}
             disabled={isLocating}
-            className={`flex items-center justify-center w-10 h-10 rounded-2xl border shadow-lg backdrop-blur-3xl transition-all duration-300 hover:scale-105 active:scale-95 ${userCoords
+            className={`flex items-center justify-center w-10 h-10 rounded-2xl border shadow-lg transition-all duration-300 hover:scale-105 active:scale-95 ${userCoords
                 ? "bg-sky-500 border-sky-400 text-slate-950 shadow-[0_0_15px_rgba(14,165,233,0.4)]"
-                : "bg-slate-950/92 border-white/10 text-slate-200 hover:bg-slate-900/90 hover:border-white/20"
+                : "bg-slate-950/40 backdrop-blur-xl border border-white/10 text-slate-200 hover:bg-slate-900 hover:border-white/20"
               }`}
             title="Me géolocaliser et suggérer un arrêt"
           >
@@ -1024,9 +968,9 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
               setIsSearchOpen(!isSearchOpen);
               if (isSearchOpen) setSearchQuery("");
             }}
-            className={`flex items-center justify-center w-10 h-10 rounded-2xl border shadow-lg backdrop-blur-3xl transition-all duration-300 hover:scale-105 active:scale-95 ${isSearchOpen
+            className={`flex items-center justify-center w-10 h-10 rounded-2xl border shadow-lg transition-all duration-300 hover:scale-105 active:scale-95 ${isSearchOpen
               ? "bg-cyan-500 border-cyan-400 text-slate-950 shadow-[0_0_15px_rgba(34,211,238,0.4)]"
-              : "bg-slate-950/92 border-white/10 text-slate-200 hover:bg-slate-900/90 hover:border-white/20"
+              : "bg-slate-950/40 backdrop-blur-xl border border-white/10 text-slate-200 hover:bg-slate-900 hover:border-white/20"
               }`}
             title="Rechercher un arrêt"
           >
@@ -1036,9 +980,9 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
           {/* Filters Toggle Button */}
           <button
             onClick={() => setIsFilterOpen(!isFilterOpen)}
-            className={`flex items-center gap-2 px-3.5 py-2.5 h-10 rounded-2xl border text-xs font-bold shadow-lg backdrop-blur-3xl transition-all duration-300 ${isFilterOpen
+            className={`flex items-center gap-2 px-3.5 py-2.5 h-10 rounded-2xl border text-xs font-bold shadow-lg transition-all duration-300 ${isFilterOpen
               ? "bg-amber-500 border-amber-400 text-slate-950 shadow-[0_0_15px_rgba(245,158,11,0.4)]"
-              : "bg-slate-950/92 border-white/10 text-slate-200 hover:bg-slate-900/90 hover:border-white/20"
+              : "bg-slate-950/40 backdrop-blur-xl border border-white/10 text-slate-200 hover:bg-slate-900 hover:border-white/20"
               }`}
           >
             <SlidersHorizontal size={14} className={isFilterOpen ? "animate-pulse" : ""} />
@@ -1048,7 +992,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
 
         {/* Search & Suggestions Results Dropdown */}
         {isSearchOpen && (
-          <div className="pointer-events-auto bg-slate-950/95 border border-white/10 p-3 rounded-[20px] w-64 md:w-80 shadow-2xl flex flex-col gap-1 max-h-72 overflow-y-auto no-scrollbar animate-in fade-in slide-in-from-top-2 duration-200 mt-1">
+          <div className="pointer-events-auto bg-slate-950/50 backdrop-blur-2xl border border-white/10 p-3 rounded-[20px] w-64 md:w-80 shadow-2xl flex flex-col gap-1 max-h-72 overflow-y-auto no-scrollbar animate-in fade-in slide-in-from-top-2 duration-200 mt-1">
             {searchQuery.trim().length > 0 ? (
               filteredStops.length === 0 ? (
                 <div className="text-[10px] text-slate-500 text-center py-4 font-black uppercase tracking-wider">
@@ -1070,7 +1014,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                       <span className="text-xs font-bold text-slate-200 truncate font-mono uppercase tracking-wide">
                         {stop.stop_name}
                       </span>
-                      <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">
+                      <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">
                         {stop.lines?.length > 0 ? `Lignes : ${stop.lines.join(", ")}` : "Aucune ligne"}
                       </span>
                     </div>
@@ -1118,7 +1062,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                             <span className="text-[10px] font-black text-red-400 uppercase tracking-widest block">
                               Position hors réseau AXO
                             </span>
-                            <span className="text-[9px] text-slate-500 font-bold mt-1 block normal-case">
+                            <span className="text-[9px] text-slate-555 font-bold mt-1 block normal-case">
                               Votre GPS indique que vous êtes à plus de 20 km du réseau.
                             </span>
                           </div>
@@ -1143,7 +1087,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
                             <span className="text-xs font-bold text-slate-200 truncate font-mono uppercase tracking-wide">
                               {stop.stop_name}
                             </span>
-                            <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
                               <span>Lignes : {stop.lines?.join(", ") || "Aucune"}</span>
                               <span className="w-1 h-1 rounded-full bg-slate-700" />
                               <span className="text-cyan-400 font-bold font-sans">
@@ -1172,7 +1116,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
 
         {/* Dropdown Menu */}
         {isFilterOpen && (
-          <div className="bg-slate-950/92 backdrop-blur-3xl border border-white/10 p-3 rounded-2xl w-60 shadow-2xl flex flex-col gap-1.5 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="bg-slate-950/45 backdrop-blur-2xl border border-white/10 p-3 rounded-2xl w-60 shadow-2xl flex flex-col gap-1.5 animate-in fade-in slide-in-from-top-2 duration-200">
             <h4 className="text-[9px] font-black text-slate-500 uppercase tracking-widest border-b border-white/5 pb-2 mb-1 px-2">
               Affichage de la carte
             </h4>
@@ -1189,7 +1133,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
               <div
                 className={`relative w-[36px] h-[20px] rounded-full transition-all duration-300 shrink-0 ${showBuses
                     ? "bg-amber-500/20 border border-amber-500/50 shadow-[0_0_8px_rgba(245,158,11,0.25)]"
-                    : "bg-slate-950/80 border border-white/10"
+                    : "bg-slate-900/30 border border-white/10"
                   }`}
               >
                 <div
@@ -1213,7 +1157,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
               <div
                 className={`relative w-[36px] h-[20px] rounded-full transition-all duration-300 shrink-0 ${showShapes
                     ? "bg-emerald-500/20 border border-emerald-500/50 shadow-[0_0_8px_rgba(52,211,153,0.25)]"
-                    : "bg-slate-950/80 border border-white/10"
+                    : "bg-slate-900/30 border border-white/10"
                   }`}
               >
                 <div
@@ -1237,7 +1181,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
               <div
                 className={`relative w-[36px] h-[20px] rounded-full transition-all duration-300 shrink-0 ${showStops
                     ? "bg-purple-500/20 border border-purple-500/50 shadow-[0_0_8px_rgba(192,132,252,0.25)]"
-                    : "bg-slate-950/80 border border-white/10"
+                    : "bg-slate-900/30 border border-white/10"
                   }`}
               >
                 <div
@@ -1268,7 +1212,6 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
               setSelectedBusId(null);
               setSelectedStopId(null);
               setHighlightedBusId(null);
-              setIsInitialModalOpen(false);
             }}
           />
 
@@ -1278,10 +1221,10 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
             highlightedBus={highlightedBus}
           />
 
-          {/* Dark Mode CartoDB layer */}
+          {/* Google Maps Standard Roadmap Layer */}
           <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-            attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
+            url="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
+            attribution="&copy; Google Maps"
           />
 
           {/* User Location Pulse Marker */}
@@ -1492,9 +1435,9 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
             : "translate-y-[calc(100%+80px)] md:scale-95 md:opacity-0 md:translate-y-0 opacity-0 pointer-events-none"
           }`}
       >
-        <div className="h-full bg-slate-950/92 backdrop-blur-3xl border-t md:border border-white/10 rounded-t-[32px] md:rounded-[24px] p-3.5 md:p-5 shadow-[0_-15px_30px_rgba(0,0,0,0.5)] md:shadow-[0_20px_50px_rgba(0,0,0,0.6)] flex flex-col gap-2 md:gap-3.5 overflow-hidden">
+        <div className="h-full bg-slate-950/45 backdrop-blur-3xl border-t md:border border-white/10 rounded-t-[32px] md:rounded-[24px] p-3.5 md:p-5 shadow-[0_-15px_30px_rgba(0,0,0,0.25)] md:shadow-[0_20px_50px_rgba(0,0,0,0.35)] flex flex-col gap-2 md:gap-3.5 overflow-hidden">
           {/* Drag Handle Indicator */}
-          <div className="w-12 h-1 bg-white/20 rounded-full mx-auto shrink-0 mb-0.5 md:hidden" />
+          <div className="w-12 h-1 bg-white/10 rounded-full mx-auto shrink-0 mb-0.5 md:hidden" />
 
           {/* CONTENT FOR SELECTED BUS */}
           {selectedBus && (
