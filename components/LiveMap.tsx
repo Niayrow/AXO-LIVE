@@ -1221,10 +1221,14 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp }: LiveMapProps
             highlightedBus={highlightedBus}
           />
 
-          {/* Google Maps Standard Roadmap Layer */}
+          {/* MapTiler Streets Tile Layer */}
           <TileLayer
-            url="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
-            attribution="&copy; Google Maps"
+            url={`https://api.maptiler.com/maps/streets-v4/{z}/{x}/{y}.png?key=${
+              process.env.NEXT_PUBLIC_MAPTILER_KEY || "GKbS2layBBOWyQqgNmjm"
+            }`}
+            attribution='&copy; <a href="https://www.maptiler.com/copyright/" target="_blank">MapTiler</a> &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap contributors</a>'
+            tileSize={512}
+            zoomOffset={-1}
           />
 
           {/* User Location Pulse Marker */}

@@ -121,8 +121,13 @@ export const MAP_STYLES = `
     z-index: 600 !important;
   }
 
-  /* Prevent light background flash when zooming or panning Google Maps tiles */
+  /* Prevent light background flash when zooming or panning MapTiler tiles */
   .leaflet-container {
     background-color: #e5e7eb !important;
+  }
+
+  /* Increase map tiles saturation by 10% */
+  .leaflet-tile {
+    filter: saturate(1.1) !important;
   }
 `;

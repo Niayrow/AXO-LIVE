@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, ExternalLink, Code, Shield, Heart, Globe, Cookie, Server } from "lucide-react";
+import { ArrowLeft, ExternalLink, Code, Shield, Globe, Cookie, Server } from "lucide-react";
 
 export default function AboutPage() {
   const currentYear = new Date().getFullYear();
@@ -71,7 +71,7 @@ export default function AboutPage() {
             </h2>
           </div>
           <p className="text-[13px] text-slate-300 leading-relaxed">
-            Application conçue et développée avec passion par{" "}
+            Application conçue et développée avec soin par{" "}
             <a
               href="https://sofianeweb.fr"
               target="_blank"
@@ -146,10 +146,10 @@ export default function AboutPage() {
           </p>
         </div>
 
-        {/* Made with love */}
+        {/* Designed and developed locally */}
         <div className="bg-slate-950/60 backdrop-blur-3xl border border-white/[0.08] rounded-[24px] p-5 shadow-[0_10px_40px_rgba(0,0,0,0.4)] mb-6">
-          <p className="text-[12px] text-slate-400 text-center leading-relaxed flex items-center justify-center gap-1.5 flex-wrap">
-            Fait avec <Heart size={12} className="text-red-400 fill-red-400 animate-pulse" /> dans le Bassin Creillois
+          <p className="text-[12px] text-slate-400 text-center leading-relaxed">
+            Conçu et développé dans le Bassin Creillois
           </p>
         </div>
 
