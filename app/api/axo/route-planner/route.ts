@@ -426,18 +426,19 @@ async function getRouteDb(): Promise<RouteDb> {
   TARGET_LINES.forEach((line) => {
     ["0", "1"].forEach((dir) => {
       const dirTrips = tripsByLineDir.get(lineDirKey(line, dir)) || [];
-      let longest: TripInfo | null = null;
+      let longestTripId: string | null = null;
       let maxStops = 0;
-      dirTrips.forEach((t) => {
+      for (let i = 0; i < dirTrips.length; i++) {
+        const t = dirTrips[i];
         const count = stopTimesByTrip.get(t.trip_id)?.length || 0;
         if (count > maxStops) {
           maxStops = count;
-          longest = t;
+          longestTripId = t.trip_id;
         }
-      });
-      if (longest) {
+      }
+      if (longestTripId) {
         lineStopsObj[line][dir] = (
-          stopTimesByTrip.get(longest.trip_id) || []
+          stopTimesByTrip.get(longestTripId) || []
         ).map((st) => st.stop_id);
       }
     });
