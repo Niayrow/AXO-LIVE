@@ -1,0 +1,37 @@
+/* AXO Live v2.0 — Thème inspiré Oise Mobilité */
+
+.v2-root {
+  --v2-coral: #E8574A;
+  --v2-coral-dark: #D44A3E;
+  --v2-green: #3A7D5C;
+  --v2-green-light: #E8F5EE;
+  --v2-charcoal: #2D3436;
+  --v2-muted: #636E72;
+  --v2-surface: #F7F8FA;
+  --v2-border: #E8ECF0;
+  color: var(--v2-charcoal);
+  background: var(--v2-surface);
+}
+
+.v2-root ::selection {
+  background: rgba(232, 87, 74, 0.2);
+}
+
+@keyframes v2-slide-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.v2-animate-in {
+  animation: v2-slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.v2-section-title::before {
+  content: "";
+  display: block;
+  width: 32px;
+  height: 4px;
+  background: var(--v2-green);
+  border-radius: 2px;
+  margin-bottom: 8px;
+}

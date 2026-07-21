@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import BottomNav from "@/components/BottomNav";
 import ContactBubble from "@/components/ContactBubble";
+import V2PromoBanner from "@/components/V2PromoBanner";
 import Providers from "./providers";
 import { Analytics } from "@vercel/analytics/react";
 
@@ -140,6 +141,7 @@ export default function RootLayout({
       <body className={`${inter.className} bg-slate-950 text-slate-50 overscroll-none h-[100dvh] w-full max-w-[100vw] overflow-hidden`}>
         <Providers>
           <div className="h-full w-full overflow-y-auto overflow-x-hidden no-scrollbar">
+            <V2PromoBanner />
             {children}
           </div>
           <BottomNav />

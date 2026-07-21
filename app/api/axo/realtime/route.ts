@@ -292,8 +292,11 @@ export async function GET(req: NextRequest) {
         delay,
         stop_time_updates: tripUpdate?.stopTimeUpdate
           ? (tripUpdate.stopTimeUpdate as any[])
-
-            .filter((stu: any) => !vehicle?.currentStopSequence || stu.stopSequence >= vehicle.currentStopSequence)
+            // Garder l'arrêt courant + le précédent (pour estimer la progression entre 2 arrêts)
+            .filter((stu: any) => {
+              if (!vehicle?.currentStopSequence) return true;
+              return stu.stopSequence >= vehicle.currentStopSequence - 1;
+            })
             .map((stu: any) => ({
               stop_sequence: stu.stopSequence,
               stop_id: stu.stopId,

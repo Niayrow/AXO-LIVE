@@ -8,7 +8,7 @@ export default function ContactBubble() {
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
 
-  if (pathname === "/map") return null;
+  if (pathname === "/map" || pathname.startsWith("/v2")) return null;
 
   return (
     <div className="fixed bottom-24 right-4 z-[60] flex flex-col items-end gap-3 pointer-events-none">

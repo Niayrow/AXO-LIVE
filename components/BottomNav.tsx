@@ -40,6 +40,9 @@ export default function BottomNav() {
     { name: "Infos Trafic", href: "/supervision", icon: Activity },
   ];
 
+  // Masquer la nav v1 sur la version 2.0
+  if (pathname.startsWith("/v2")) return null;
+
   // Rendu d'attente neutre pendant le chargement SSR pour éviter les sauts d'UI
   if (!mounted) return null;
 
