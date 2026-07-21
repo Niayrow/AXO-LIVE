@@ -200,14 +200,14 @@ function buildTransferClusters(
       const cluster = [seed];
       const seedCoord = stopCoords.get(seed);
       if (seedCoord) {
-        for (const other of [...unused]) {
+        Array.from(unused).forEach((other) => {
           const oc = stopCoords.get(other);
-          if (!oc) continue;
+          if (!oc) return;
           if (haversineMeters(seedCoord, oc) <= TRANSFER_CLUSTER_METERS) {
             cluster.push(other);
             unused.delete(other);
           }
-        }
+        });
       }
       cluster.forEach((id) => clusterOf.set(id, cluster));
     }
