@@ -139,10 +139,9 @@ export default function V2AboutPage() {
         >
           <p className="text-sm text-om-muted leading-relaxed">
             Cette application{" "}
-            <strong className="text-om-green">ne collecte aucune donnée personnelle</strong>{" "}
-            et ne dépose <strong className="text-om-green">aucun cookie</strong>.
-            Seul Vercel Analytics est utilisé pour mesurer la fréquentation de manière
-            anonyme.
+            <strong className="text-om-green">ne collecte aucune donnée personnelle</strong>.
+            Un cookie technique optionnel peut mémoriser le choix d&apos;interface (v1/v2).
+            Vercel Analytics mesure la fréquentation de manière anonyme.
           </p>
         </InfoCard>
       </div>
@@ -162,9 +161,6 @@ export default function V2AboutPage() {
             sofianeweb.fr
           </a>
         </p>
-        <Link href="/" className="text-xs font-bold text-om-muted hover:text-om-coral">
-          Retour à la version 1.0
-        </Link>
       </footer>
     </div>
   );

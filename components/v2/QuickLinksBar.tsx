@@ -4,7 +4,6 @@ import {
   Compass,
   Clock,
   Activity,
-  ShoppingBag,
   Info,
 } from "lucide-react";
 
@@ -14,14 +13,13 @@ const links = [
   { name: "Horaires arrêts", href: "/v2/stops", icon: Clock },
   { name: "Infos trafic", href: "/v2/supervision", icon: Activity },
   { name: "À propos", href: "/v2/about", icon: Info },
-  { name: "Version 1.0", href: "/", icon: ShoppingBag },
 ];
 
 export default function QuickLinksBar() {
   return (
     <div className="relative -mt-8 mx-4 max-w-3xl lg:mx-auto">
       <div className="bg-white rounded-om-lg shadow-om-lg border border-om-border p-3">
-        <div className="grid grid-cols-3 sm:grid-cols-6 gap-1">
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-1">
           {links.map((link) => {
             const Icon = link.icon;
             return (

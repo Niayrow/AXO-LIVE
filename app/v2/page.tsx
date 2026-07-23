@@ -460,10 +460,6 @@ export default function V2HomePage() {
           <Link href="/v2/about" className="text-om-coral">
             Mentions légales
           </Link>
-          <span className="text-om-border">·</span>
-          <Link href="/" className="text-om-muted hover:text-om-coral">
-            Version 1.0
-          </Link>
         </div>
       </footer>
     </div>

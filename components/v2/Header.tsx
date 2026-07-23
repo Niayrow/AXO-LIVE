@@ -3,11 +3,20 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Radio } from "lucide-react";
+import SwitchToV1Link from "./SwitchToV1Link";
 
 export default function V2Header() {
   const pathname = usePathname();
 
-  if (pathname === "/v2/map") return null;
+  if (pathname === "/v2/map") {
+    return (
+      <div className="fixed bottom-[5.75rem] left-3 z-[1100] pointer-events-none">
+        <div className="pointer-events-auto rounded-full bg-white/70 backdrop-blur-md border border-om-border/50 px-2 py-0.5 shadow-sm">
+          <SwitchToV1Link />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <header className="sticky top-0 z-50 px-4 pt-3 pb-1">
@@ -27,13 +36,7 @@ export default function V2Header() {
             <Radio size={11} className="text-om-coral" />
             Temps réel
           </span>
-          <Link
-            href="/"
-            className="text-[10px] font-bold text-om-muted hover:text-om-coral transition-colors px-2 py-1 rounded-lg hover:bg-om-surface"
-            title="Version 1.0"
-          >
-            v1
-          </Link>
+          <SwitchToV1Link />
         </div>
       </div>
     </header>

@@ -2,10 +2,10 @@
   "name": "AXO Live Dashboard",
   "short_name": "AXO Live",
   "description": "Suivi en temps réel et infos trafic du réseau de bus AXO",
-  "start_url": "/",
+  "start_url": "/v2",
   "display": "standalone",
-  "background_color": "#020617",
-  "theme_color": "#020617",
+  "background_color": "#F7F4EF",
+  "theme_color": "#E8574A",
   "orientation": "portrait-primary",
   "icons": [
     {

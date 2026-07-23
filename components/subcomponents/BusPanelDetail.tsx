@@ -7,6 +7,8 @@ interface BusPanelDetailProps {
   selectedBus: Vehicle;
   staticData: any;
   setSelectedBusId: (id: string | null) => void;
+  onStopClick?: (stop: { stop_id: string; stop_lat?: number; stop_lon?: number }) => void;
+  focusedStopId?: string | null;
 }
 
 const formatBusName = (vehicleId: string) => {
@@ -23,6 +25,8 @@ export default function BusPanelDetail({
   selectedBus,
   staticData,
   setSelectedBusId,
+  onStopClick,
+  focusedStopId = null,
 }: BusPanelDetailProps) {
   const directionRef = useRef<HTMLDivElement>(null);
   const [scrollDistance, setScrollDistance] = useState(0);
@@ -307,14 +311,23 @@ export default function BusPanelDetail({
             if (isPassed && stopSeq < currentSeq - 1) return null;
 
             return (
-              <div key={stop.stop_id} className="relative flex items-center justify-between min-h-[26px] md:min-h-[30px] py-0.5 md:py-1">
+              <button
+                type="button"
+                key={stop.stop_id}
+                onClick={() => onStopClick?.(stop)}
+                className={`relative flex items-center justify-between min-h-[26px] md:min-h-[30px] py-0.5 md:py-1 w-full text-left rounded-lg transition-colors ${
+                  onStopClick
+                    ? "cursor-pointer hover:bg-white/5 active:bg-white/10 -mx-1 px-1"
+                    : ""
+                } ${focusedStopId === stop.stop_id ? "bg-white/10 ring-1 ring-white/15" : ""}`}
+              >
                 {/* Static stop dot */}
                 <div className={`absolute -left-[29.5px] w-3.5 h-3.5 rounded-full border-2 z-10 ${dotClass}`} style={dotStyle} />
 
                 {/* Real-time animated bus on the timeline */}
                 {isNext && (
                   <div
-                    className="absolute -left-[34.5px] w-6 h-6 rounded-full flex items-center justify-center z-20 transition-all duration-1000 ease-in-out"
+                    className="absolute -left-[34.5px] w-6 h-6 rounded-full flex items-center justify-center z-20 transition-all duration-1000 ease-in-out pointer-events-none"
                     style={{
                       ...busStyle,
                       boxShadow: `0 0 12px ${activeColor}`
@@ -377,7 +390,7 @@ export default function BusPanelDetail({
                     </div>
                   )}
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>

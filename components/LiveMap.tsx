@@ -377,23 +377,51 @@ function MapEventsListener({
   return null;
 }
 
+type FocusedMapStop = {
+  stop_id: string;
+  stop_lat: number;
+  stop_lon: number;
+  nonce: number;
+};
+
 // Component to automatically recenter/fly the map to the active selection
 function MapFocusController({
   selectedBus,
   selectedStop,
-  highlightedBus
+  highlightedBus,
+  focusedStop,
 }: {
   selectedBus: Vehicle | null;
   selectedStop: any | null;
   highlightedBus: Vehicle | null;
+  focusedStop: FocusedMapStop | null;
 }) {
   const map = useMap();
   const lastFocusedIdRef = useRef<string | null>(null);
   const lastFocusedStopIdRef = useRef<string | null>(null);
 
   useEffect(() => {
+    // 0. Explicit focus from bus trip timeline (overrides bus selection)
+    if (focusedStop?.stop_lat && focusedStop?.stop_lon) {
+      // Allow re-focusing the bus later once timeline focus is cleared
+      if (lastFocusedIdRef.current?.startsWith("bus-")) {
+        lastFocusedIdRef.current = null;
+      }
+      const focusKey = `timeline-stop-${focusedStop.stop_id}-${focusedStop.nonce}`;
+      if (lastFocusedStopIdRef.current !== focusKey) {
+        lastFocusedStopIdRef.current = focusKey;
+        const timer = setTimeout(() => {
+          map.flyTo(
+            [focusedStop.stop_lat, focusedStop.stop_lon],
+            18,
+            { animate: true, duration: 1.2 }
+          );
+        }, 100);
+        return () => clearTimeout(timer);
+      }
+    }
     // 1. Prioritize Highlighted Bus (temporary hover or focus)
-    if (highlightedBus?.position?.lat && highlightedBus?.position?.lon) {
+    else if (highlightedBus?.position?.lat && highlightedBus?.position?.lon) {
       const focusKey = `highlight-${highlightedBus.id}`;
       if (lastFocusedIdRef.current !== focusKey) {
         lastFocusedIdRef.current = focusKey;
@@ -448,7 +476,7 @@ function MapFocusController({
         lastFocusedIdRef.current = null;
       }
     }
-    if (!selectedStop) {
+    if (!selectedStop && !focusedStop) {
       lastFocusedStopIdRef.current = null;
     }
   }, [
@@ -459,6 +487,10 @@ function MapFocusController({
     highlightedBus?.id,
     highlightedBus?.position?.lat,
     highlightedBus?.position?.lon,
+    focusedStop?.stop_id,
+    focusedStop?.stop_lat,
+    focusedStop?.stop_lon,
+    focusedStop?.nonce,
     map
   ]);
 
@@ -472,9 +504,41 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp, variant = "def
   const mkBusIcon = isV2 ? createBusIconV2 : createBusIcon;
   const mkStopIcon = isV2 ? createStopIconV2 : createStopIcon;
   const mkUserIcon = isV2 ? createUserIconV2 : createUserIcon;
-  const [selectedBusId, setSelectedBusId] = useState<string | null>(null);
+  const [selectedBusId, setSelectedBusIdState] = useState<string | null>(null);
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
   const [highlightedBusId, setHighlightedBusId] = useState<string | null>(null);
+  const [focusedStop, setFocusedStop] = useState<FocusedMapStop | null>(null);
+  const appliedBusDeepLinkRef = useRef(false);
+  const appliedBusLineDeepLinkRef = useRef(false);
+
+  const clearBusQueryParam = () => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("bus")) return;
+    url.searchParams.delete("bus");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  };
+
+  // Clearing selection must also drop ?bus= so polling cannot re-focus the bus
+  const setSelectedBusId = (id: string | null) => {
+    setSelectedBusIdState(id);
+    setFocusedStop(null);
+    if (id === null) clearBusQueryParam();
+  };
+
+  const handleFocusStopFromTimeline = (stop: {
+    stop_id: string;
+    stop_lat?: number;
+    stop_lon?: number;
+  }) => {
+    if (!stop?.stop_id || !stop.stop_lat || !stop.stop_lon) return;
+    setFocusedStop({
+      stop_id: stop.stop_id,
+      stop_lat: stop.stop_lat,
+      stop_lon: stop.stop_lon,
+      nonce: Date.now(),
+    });
+  };
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
@@ -585,17 +649,22 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp, variant = "def
     return () => clearTimeout(timer);
   }, [scrollingAlertContent]);
 
-  // Check URL query parameters on mount to focus a specific bus (deep linking)
+  // Deep-link ?bus= once (do not re-apply on every vehicles poll)
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const busId = params.get("bus");
-      if (busId) {
-        setSelectedBusId(busId);
-        const bus = vehicles.find(v => v.id === busId);
-        if (bus?.route_id) {
-          setSelectedLineId(bus.route_id);
-        }
+    if (typeof window === "undefined") return;
+    const busId = new URLSearchParams(window.location.search).get("bus");
+    if (!busId) return;
+
+    if (!appliedBusDeepLinkRef.current) {
+      appliedBusDeepLinkRef.current = true;
+      setSelectedBusIdState(busId);
+    }
+
+    if (!appliedBusLineDeepLinkRef.current) {
+      const bus = vehicles.find(v => v.id === busId);
+      if (bus?.route_id) {
+        appliedBusLineDeepLinkRef.current = true;
+        setSelectedLineId(bus.route_id);
       }
     }
   }, [vehicles]);
@@ -710,7 +779,17 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp, variant = "def
 
   // Filter stops to show dynamically based on selections and zoom breaks
   const stopsToShow = useMemo(() => {
-    if (!showStops) return selectedStop ? [selectedStop] : [];
+    if (!showStops) {
+      const forced = [];
+      if (selectedStop) forced.push(selectedStop);
+      if (focusedStop) {
+        const match =
+          allStopsData?.stops?.find((s: any) => s.stop_id === focusedStop.stop_id) ||
+          focusedStop;
+        if (!forced.some((s: any) => s.stop_id === match.stop_id)) forced.push(match);
+      }
+      return forced;
+    }
 
     const activeRouteId = selectedLineId || selectedBus?.route_id || highlightedBus?.route_id;
     let stops = allStopsData?.stops || [];
@@ -721,13 +800,22 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp, variant = "def
       if (zoomLevel < 14) {
         stops = stops.filter((s: any) =>
           s.stop_id === selectedStopId ||
+          s.stop_id === focusedStop?.stop_id ||
           (s.lines && s.lines.length >= 3) ||
           /Gare|Mairie|Lycée|Collège/i.test(s.stop_name || "")
         );
       }
     }
+
+    if (focusedStop && !stops.some((s: any) => s.stop_id === focusedStop.stop_id)) {
+      const match =
+        allStopsData?.stops?.find((s: any) => s.stop_id === focusedStop.stop_id) ||
+        focusedStop;
+      stops = [...stops, match];
+    }
+
     return stops;
-  }, [showStops, selectedStop, selectedBus, highlightedBus, selectedLineId, allStopsData, zoomLevel, selectedStopId]);
+  }, [showStops, selectedStop, selectedBus, highlightedBus, selectedLineId, allStopsData, zoomLevel, selectedStopId, focusedStop]);
 
   // Fuzzy search results using custom hook
   const filteredStops = useFuzzySearch(allStopsData?.stops, searchQuery);
@@ -1235,6 +1323,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp, variant = "def
               setSelectedBusId(null);
               setSelectedStopId(null);
               setHighlightedBusId(null);
+              setFocusedStop(null);
             }}
           />
 
@@ -1242,6 +1331,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp, variant = "def
             selectedBus={selectedBus}
             selectedStop={selectedStop}
             highlightedBus={highlightedBus}
+            focusedStop={focusedStop}
           />
 
           {/* MapTiler Streets Tile Layer */}
@@ -1354,7 +1444,8 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp, variant = "def
 
           {/* Physical Network Stops */}
           {stopsToShow?.map((stop: any) => {
-            const isSelected = selectedStopId === stop.stop_id;
+            const isSelected =
+              selectedStopId === stop.stop_id || focusedStop?.stop_id === stop.stop_id;
             const stopLines: string[] = stop.lines || [];
 
             const busOnTop = (spiderfiedVehicles as any[]).find(v =>
@@ -1396,6 +1487,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp, variant = "def
                   eventHandlers={{
                     click: (e) => {
                       L.DomEvent.stopPropagation(e);
+                      setFocusedStop(null);
                       setSelectedStopId(stop.stop_id);
                       setSelectedBusId(null);
                     }
@@ -1413,6 +1505,7 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp, variant = "def
                       eventHandlers={{
                         click: (e) => {
                           L.DomEvent.stopPropagation(e);
+                          setFocusedStop(null);
                           setSelectedStopId(stop.stop_id);
                           setSelectedBusId(null);
                         }
@@ -1471,12 +1564,16 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp, variant = "def
                 selectedBus={selectedBus}
                 staticData={staticData}
                 setSelectedBusId={setSelectedBusId}
+                onStopClick={handleFocusStopFromTimeline}
+                focusedStopId={focusedStop?.stop_id ?? null}
               />
             ) : (
               <BusPanelDetail
                 selectedBus={selectedBus}
                 staticData={staticData}
                 setSelectedBusId={setSelectedBusId}
+                onStopClick={handleFocusStopFromTimeline}
+                focusedStopId={focusedStop?.stop_id ?? null}
               />
             )
           )}

@@ -10,6 +10,8 @@ interface BusPanelDetailV2Props {
   selectedBus: Vehicle;
   staticData: any;
   setSelectedBusId: (id: string | null) => void;
+  onStopClick?: (stop: { stop_id: string; stop_lat?: number; stop_lon?: number }) => void;
+  focusedStopId?: string | null;
 }
 
 const formatBusName = (vehicleId: string) =>
@@ -26,6 +28,8 @@ export default function BusPanelDetailV2({
   selectedBus,
   staticData,
   setSelectedBusId,
+  onStopClick,
+  focusedStopId = null,
 }: BusPanelDetailV2Props) {
   const directionRef = useRef<HTMLDivElement>(null);
   const [scrollDistance, setScrollDistance] = useState(0);
@@ -246,9 +250,19 @@ export default function BusPanelDetailV2({
             }
 
             return (
-              <div
+              <button
+                type="button"
                 key={stop.stop_id}
-                className="relative flex items-center justify-between min-h-[32px]"
+                onClick={() => onStopClick?.(stop)}
+                className={`relative flex items-center justify-between min-h-[32px] w-full text-left rounded-lg transition-colors ${
+                  onStopClick
+                    ? "cursor-pointer hover:bg-om-coral/5 active:bg-om-coral/10 -mx-1 px-1"
+                    : ""
+                } ${
+                  focusedStopId === stop.stop_id
+                    ? "bg-om-coral/10 ring-1 ring-om-coral/20"
+                    : ""
+                }`}
               >
                 <div
                   className={`absolute -left-[29px] w-3 h-3 rounded-full border-2 z-10 ${
@@ -259,14 +273,14 @@ export default function BusPanelDetailV2({
                         : "bg-white border-om-border"
                   }`}
                   style={
-                    isTarget
+                    isTarget || focusedStopId === stop.stop_id
                       ? { backgroundColor: lineColor, borderColor: lineColor }
                       : undefined
                   }
                 />
                 {showBus && (
                   <div
-                    className="absolute -left-[34px] w-6 h-6 rounded-full flex items-center justify-center z-20 border-2 bg-white transition-all duration-700 ease-linear"
+                    className="absolute -left-[34px] w-6 h-6 rounded-full flex items-center justify-center z-20 border-2 bg-white transition-all duration-700 ease-linear pointer-events-none"
                     style={{
                       borderColor: lineColor,
                       color: lineColor,
@@ -281,11 +295,15 @@ export default function BusPanelDetailV2({
                   className={`text-sm font-semibold truncate pr-3 ${
                     isPassed
                       ? "text-om-muted line-through"
-                      : isTarget
+                      : isTarget || focusedStopId === stop.stop_id
                         ? "font-extrabold"
                         : "text-om-charcoal"
                   }`}
-                  style={isTarget ? { color: lineColor } : undefined}
+                  style={
+                    isTarget || focusedStopId === stop.stop_id
+                      ? { color: lineColor }
+                      : undefined
+                  }
                 >
                   {stop.stop_name}
                 </span>
@@ -296,14 +314,14 @@ export default function BusPanelDetailV2({
                       : "bg-white border-om-border"
                   }`}
                   style={
-                    isTarget
+                    isTarget || focusedStopId === stop.stop_id
                       ? { color: lineColor, borderColor: `${lineColor}40` }
                       : undefined
                   }
                 >
                   {expectedTime || scheduledTime}
                 </span>
-              </div>
+              </button>
             );
           })}
         </div>
