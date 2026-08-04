@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import AdmZip from "adm-zip";
 import Papa from "papaparse";
+import { applyStopCoordinateOverride } from "@/lib/stopCoordinateOverrides";
 
 const GTFS_STATIC_URL = "https://api.oisemob.cityway.fr/dataflow/offre-tc/download?provider=AXO&dataFormat=GTFS&dataProfil=OPENDATA";
 
@@ -73,14 +74,15 @@ export async function GET(req: NextRequest) {
       const uniqueStops = new Map<string, any>();
       parsedStops.forEach((s: any) => {
         if (!s.stop_id) return;
-        if (targetStopIds.has(s.stop_id) && s.stop_lat && s.stop_lon && s.stop_name) {
-          const routesServing = Array.from(stopIdToRoutes.get(s.stop_id) || []);
-          if (!uniqueStops.has(s.stop_id)) {
-            uniqueStops.set(s.stop_id, {
-              stop_id: s.stop_id,
-              stop_name: s.stop_name,
-              stop_lat: parseFloat(s.stop_lat),
-              stop_lon: parseFloat(s.stop_lon),
+        const corrected = applyStopCoordinateOverride(s);
+        if (targetStopIds.has(corrected.stop_id) && corrected.stop_lat && corrected.stop_lon && corrected.stop_name) {
+          const routesServing = Array.from(stopIdToRoutes.get(corrected.stop_id) || []);
+          if (!uniqueStops.has(corrected.stop_id)) {
+            uniqueStops.set(corrected.stop_id, {
+              stop_id: corrected.stop_id,
+              stop_name: corrected.stop_name,
+              stop_lat: parseFloat(String(corrected.stop_lat)),
+              stop_lon: parseFloat(String(corrected.stop_lon)),
               lines: routesServing
             });
           }

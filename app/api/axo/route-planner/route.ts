@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import AdmZip from "adm-zip";
 import Papa from "papaparse";
+import { getOverriddenStopCoords } from "@/lib/stopCoordinateOverrides";
 
 const GTFS_STATIC_URL =
   "https://api.oisemob.cityway.fr/dataflow/offre-tc/download?provider=AXO&dataFormat=GTFS&dataProfil=OPENDATA";
@@ -369,7 +370,7 @@ async function getRouteDb(): Promise<RouteDb> {
     const lat = parseFloat(s.stop_lat);
     const lon = parseFloat(s.stop_lon);
     if (!Number.isNaN(lat) && !Number.isNaN(lon)) {
-      stopCoords.set(s.stop_id, { lat, lon });
+      stopCoords.set(s.stop_id, getOverriddenStopCoords(s.stop_id, lat, lon));
     }
   });
 

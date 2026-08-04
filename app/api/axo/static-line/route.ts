@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import AdmZip from "adm-zip";
 import Papa from "papaparse";
+import { applyStopCoordinateOverride } from "@/lib/stopCoordinateOverrides";
 
 const GTFS_STATIC_URL = "https://api.oisemob.cityway.fr/dataflow/offre-tc/download?provider=AXO&dataFormat=GTFS&dataProfil=OPENDATA";
 
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest) {
       // OPTIMISATION MAJEURE 1 : Indexer les arrêts par stop_id dans une Map O(1)
       const stopMap = new Map<string, any>();
       stops.forEach((s: any) => {
-        if (s.stop_id) stopMap.set(s.stop_id, s);
+        if (s.stop_id) stopMap.set(s.stop_id, applyStopCoordinateOverride(s));
       });
 
       // OPTIMISATION MAJEURE 2 : Indexer les stop_times par trip_id (Group By)
