@@ -1597,32 +1597,32 @@ export default function LiveMap({ vehicles, lastUpdatedTimestamp, variant = "def
             )
           )}
 
-          {/* Nearest Stop Notification Banner */}
-          {nearestStopBanner && (
-            <div className="absolute top-24 left-4 right-4 z-[1001] flex justify-center pointer-events-none">
-              <div className={ui?.gpsBanner ?? "bg-cyan-500 border border-cyan-400 text-slate-950 px-4 py-2.5 rounded-2xl shadow-[0_10px_25px_rgba(34,211,238,0.4)] flex items-center gap-2 animate-in slide-in-from-top-3 duration-300 pointer-events-auto"}>
-                <MapPin size={14} className="animate-bounce shrink-0" />
-                <span className="text-xs font-black uppercase tracking-wider">
-                  Arrêt suggéré : {nearestStopBanner}
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* GPS Warning Notification Banner */}
-          {gpsWarning && (
-            <div className="absolute top-24 left-4 right-4 z-[1001] flex justify-center pointer-events-none">
-              <div className={ui?.warnBanner ?? "bg-red-500 border border-red-400 text-white px-4 py-2.5 rounded-2xl shadow-[0_10px_25px_rgba(239,68,68,0.4)] flex items-center gap-2 animate-in slide-in-from-top-3 duration-300 pointer-events-auto"}>
-                <AlertCircle size={14} className="animate-pulse shrink-0 text-white" />
-                <span className="text-xs font-black uppercase tracking-wider">
-                  {gpsWarning}
-                </span>
-              </div>
-            </div>
-          )}
-
         </div>
       </div>
+
+      {/* Bannières de notification : hors du tiroir, qui est masqué
+          (opacity-0) tant qu'aucun bus ou arrêt n'est sélectionné. */}
+      {nearestStopBanner && (
+        <div className={`absolute ${isV2 ? "top-32" : "top-24"} left-4 right-4 z-[1001] flex justify-center pointer-events-none`}>
+          <div className={ui?.gpsBanner ?? "bg-cyan-500 border border-cyan-400 text-slate-950 px-4 py-2.5 rounded-2xl shadow-[0_10px_25px_rgba(34,211,238,0.4)] flex items-center gap-2 animate-in slide-in-from-top-3 duration-300 pointer-events-auto"}>
+            <MapPin size={14} className="animate-bounce shrink-0" />
+            <span className="text-xs font-black uppercase tracking-wider">
+              Arrêt suggéré : {nearestStopBanner}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {gpsWarning && (
+        <div className={`absolute ${isV2 ? "top-32" : "top-24"} left-4 right-4 z-[1001] flex justify-center pointer-events-none`}>
+          <div className={ui?.warnBanner ?? "bg-red-500 border border-red-400 text-white px-4 py-2.5 rounded-2xl shadow-[0_10px_25px_rgba(239,68,68,0.4)] flex items-center gap-2 animate-in slide-in-from-top-3 duration-300 pointer-events-auto"}>
+            <AlertCircle size={14} className="animate-pulse shrink-0 text-white" />
+            <span className="text-xs font-black uppercase tracking-wider">
+              {gpsWarning}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

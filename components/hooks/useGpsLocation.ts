@@ -17,6 +17,14 @@ export const getDistance = (lat1: number, lon1: number, lat2: number, lon2: numb
   return R * c; // in meters
 };
 
+const GPS_ERROR_FALLBACK = "Impossible d'obtenir votre position";
+
+const GPS_ERROR_MESSAGES: Record<number, string> = {
+  1: "Localisation refusée : autorisez le GPS pour ce site",
+  2: "Position indisponible : vérifiez votre GPS",
+  3: "Localisation trop lente : réessayez",
+};
+
 export function useGpsLocation() {
   const [isLocating, setIsLocating] = useState(false);
   const [userCoords, setUserCoords] = useState<{ lat: number; lon: number } | null>(null);
@@ -30,7 +38,10 @@ export function useGpsLocation() {
     setSelectedBusId: (id: string | null) => void
   ) => {
     if (!navigator.geolocation) {
-      alert("Votre navigateur ne supporte pas la géolocalisation.");
+      setGpsWarning("Géolocalisation non supportée par ce navigateur");
+      setTimeout(() => {
+        setGpsWarning(null);
+      }, 6000);
       return;
     }
 
@@ -82,10 +93,16 @@ export function useGpsLocation() {
       },
       (error) => {
         setIsLocating(false);
-        console.error("Error getting location: ", error);
-        alert("Impossible d'obtenir votre position. Veuillez vérifier vos autorisations GPS.");
+        // GeolocationPositionError n'est pas sérialisable : on log les champs utiles.
+        console.warn(
+          `Géolocalisation indisponible (code ${error.code}) : ${error.message}`
+        );
+        setGpsWarning(GPS_ERROR_MESSAGES[error.code] ?? GPS_ERROR_FALLBACK);
+        setTimeout(() => {
+          setGpsWarning(null);
+        }, 6000);
       },
-      { enableHighAccuracy: true }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
     );
   };
 
