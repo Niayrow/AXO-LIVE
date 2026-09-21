@@ -16,6 +16,7 @@ import {
   Activity,
 } from "lucide-react";
 import { LINE_COLORS, getLineColor } from "@/components/lineColors";
+import BusSearch from "@/components/v2/BusSearch";
 
 const formatAlertDateRange = (start?: string, end?: string) => {
   if (!start && !end) return "";
@@ -172,14 +173,17 @@ export default function V2HomePage() {
         <div className="absolute bottom-0 left-0 w-32 h-32 rounded-full bg-om-green/20 blur-3xl pointer-events-none" />
 
         <div className="relative">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full rounded-full bg-om-green animate-ping opacity-70" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-om-green" />
-            </span>
-            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/55">
-              Flux live · Creil
-            </span>
+          <div className="flex items-center justify-between gap-2 mb-4">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-om-green animate-ping opacity-70" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-om-green" />
+              </span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/55">
+                Flux live · Creil
+              </span>
+            </div>
+            <BusSearch />
           </div>
 
           <h1 className="text-[2.15rem] leading-[0.95] font-black tracking-tight mb-2">
